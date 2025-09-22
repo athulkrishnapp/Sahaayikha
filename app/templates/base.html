@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title if title else "Sahaayikha" }}</title>
+
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- FontAwesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  
+  <style>
+    html, body {
+      height: 100%;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+    main {
+      flex: 1;
+    }
+    .dark-mode {
+      background-color: #121212 !important;
+      color: #e0e0e0 !important;
+    }
+    footer {
+      background-color: #f8f9fa;
+    }
+  </style>
+</head>
+<body id="mainBody">
+
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+    <div class="container">
+      <button class="btn btn-outline-primary me-3" id="backBtn">
+        <i class="fas fa-arrow-left"></i>
+      </button>
+
+      <a class="navbar-brand fw-bold" href="{{ url_for('main.home') }}">
+        <i class="fas fa-hands-helping text-primary"></i> Sahaayikha
+      </a>
+
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" 
+              data-bs-target="#navbarNav" aria-controls="navbarNav" 
+              aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto align-items-center">
+          {% if current_user.is_authenticated %}
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('main.logout') }}">Logout</a></li>
+          {% else %}
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('main.login') }}">Login</a></li>
+            <li class="nav-item"><a class="nav-link" href="{{ url_for('main.register') }}">Register</a></li>
+          {% endif %}
+          <li class="nav-item ms-2">
+            <button id="darkModeToggle" class="btn btn-sm btn-outline-secondary">
+              <i class="fas fa-moon"></i>
+            </button>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Flash Messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="container mt-3">
+        {% for category, message in messages %}
+          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="text-center py-4 mt-auto border-top">
+    <p class="mb-0">&copy; 2025 Sahaayikha. All rights reserved.</p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Dark Mode
+    const toggle = document.getElementById('darkModeToggle');
+    const body = document.getElementById('mainBody');
+    toggle?.addEventListener('click', () => {
+      body.classList.toggle('dark-mode');
+      localStorage.setItem('theme', body.classList.contains('dark-mode') ? 'dark' : 'light');
+    });
+    if (localStorage.getItem('theme') === 'dark') body.classList.add('dark-mode');
+
+    // Back Button
+    document.getElementById("backBtn")?.addEventListener("click", () => {
+      if (document.referrer && document.referrer.includes(window.location.host)) window.history.back();
+      else window.location.href = "{{ url_for('main.home') }}";
+    });
+  </script>
+</body>
+</html>

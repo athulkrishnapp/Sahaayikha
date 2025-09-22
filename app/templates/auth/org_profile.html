@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container my-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="card shadow p-4">
+        <h3 class="mb-4">Organization Profile</h3>
+        <form method="POST" enctype="multipart/form-data">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            {{ form.name.label(class="form-label") }}
+            {{ form.name(class="form-control", value=current_user.name) }}
+          </div>
+          <div class="mb-3">
+            {{ form.email.label(class="form-label") }}
+            {{ form.email(class="form-control", value=current_user.email, readonly=true) }}
+          </div>
+          <div class="mb-3">
+            {{ form.phone.label(class="form-label") }}
+            {{ form.phone(class="form-control", value=current_user.phone) }}
+          </div>
+          <div class="mb-3">
+            {{ form.location.label(class="form-label") }}
+            {{ form.location(class="form-control", value=current_user.location) }}
+          </div>
+          <div class="mb-3">
+            {{ form.profile_picture.label(class="form-label") }}
+            {{ form.profile_picture(class="form-control") }}
+          </div>
+          <div class="d-grid">
+            {{ form.submit(class="btn btn-success btn-lg") }}
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

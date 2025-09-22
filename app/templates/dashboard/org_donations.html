@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  <h2 class="mb-4">Received Donations</h2>
+
+  <div class="row g-4">
+    {% if donations %}
+      {% for donation in donations %}
+      <div class="col-md-6">
+        <div class="card shadow p-3">
+          <h5>{{ donation.item.title if donation.item else "N/A" }}</h5>
+          <p class="small text-muted">{{ donation.item.category if donation.item else "N/A" }}</p>
+          <p>Donated by: {{ donation.user.first_name }} {{ donation.user.last_name }}</p>
+          <p>Date: {{ donation.verified_at.strftime('%Y-%m-%d') if donation.verified_at else "Pending" }}</p>
+          <p>Status: <span class="badge bg-info">{{ donation.status }}</span></p>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="col-12 text-muted">No donations received yet.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

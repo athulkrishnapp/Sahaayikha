@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  <h2 class="mb-4">Follow Category</h2>
+  <form method="POST">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+      {{ form.category.label(class="form-label") }}
+      {{ form.category(class="form-select") }}
+      {% for error in form.category.errors %}
+        <div class="text-danger small">{{ error }}</div>
+      {% endfor %}
+    </div>
+    <div class="d-grid">
+      {{ form.submit(class="btn btn-primary") }}
+    </div>
+  </form>
+
+  <h4 class="mt-5">Your Followed Categories</h4>
+  <ul class="list-group">
+    {% for c in current_user.category_follows %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        {{ c.category }}
+        <a href="{{ url_for('main.follow_category', category=c.category) }}" class="btn btn-sm btn-danger">Unfollow</a>
+      </li>
+    {% else %}
+      <li class="list-group-item text-muted">No followed categories.</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  <h2 class="mb-4">Admin Dashboard</h2>
+
+  <!-- Quick Stats -->
+  <div class="row mb-4 g-3">
+    <div class="col-md-2">
+      <div class="card text-center shadow p-3">
+        <h6>Users</h6>
+        <p class="display-6 mb-0">{{ users_count }}</p>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="card text-center shadow p-3">
+        <h6>Organizations</h6>
+        <p class="display-6 mb-0">{{ orgs_count }}</p>
+      </div>
+    </div>
+    <div class="col-md-2">
+      <div class="card text-center shadow p-3">
+        <h6>Items</h6>
+        <p class="display-6 mb-0">{{ items_count }}</p>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-center shadow p-3">
+        <h6>Reports</h6>
+        <p class="display-6 mb-0">{{ reports_count }}</p>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card text-center shadow p-3">
+        <h6>Feedback</h6>
+        <p class="display-6 mb-0">{{ feedback_count }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Action Buttons -->
+  <div class="d-flex gap-2 mb-4 flex-wrap">
+    <a href="{{ url_for('main.admin_reports') }}" class="btn btn-danger">View Reports</a>
+    <a href="{{ url_for('main.admin_feedbacks') }}" class="btn btn-primary">View Feedback</a>
+    <a href="{{ url_for('main.admin_org_approvals') }}" class="btn btn-warning">Approve Organizations</a>
+    <a href="{{ url_for('main.system_settings') }}" class="btn btn-info">System Settings</a>
+
+  </div>
+</div>
+{% endblock %}

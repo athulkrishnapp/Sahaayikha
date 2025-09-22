@@ -1,0 +1,32 @@
+{# templates/features/chat.html #} 
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  <h2 class="mb-4">Chat</h2>
+
+  <div class="chat-box mb-3 p-3 border rounded" id="chatBox" style="height:350px; overflow-y:auto; background:#f8f9fa;">
+    {% for msg in messages %}
+      {% set me = (msg.sender_id == current_user.user_id or msg.sender_id == current_user.org_id) %}
+      <div class="mb-2 d-flex {% if me %}justify-content-end{% else %}justify-content-start{% endif %}">
+        <div class="p-2 rounded-pill {% if me %}bg-primary text-white{% else %}bg-light{% endif %}" style="max-width:75%;">
+          {{ msg.message }}
+          <div class="small text-muted mt-1">{{ msg.timestamp.strftime('%Y-%m-%d %H:%M') }}</div>
+        </div>
+      </div>
+    {% else %}
+      <p class="text-muted text-center">No messages yet. Start the conversation!</p>
+    {% endfor %}
+  </div>
+
+  <form method="POST" class="d-flex gap-2">
+    {{ form.hidden_tag() }}
+    {{ form.message(class="form-control", placeholder="Type a message...") }}
+    {{ form.submit(class="btn btn-primary") }}
+  </form>
+</div>
+
+<script>
+  const cb = document.getElementById('chatBox');
+  if (cb) { cb.scrollTop = cb.scrollHeight; }
+</script>
+{% endblock %}

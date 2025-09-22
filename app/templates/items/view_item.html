@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  <div class="row g-4">
+    <div class="col-md-8">
+      <div class="card shadow">
+        <img src="{{ url_for('static', filename='images/item_placeholder.jpg') }}" class="card-img-top" alt="{{ item.title }}">
+        <div class="card-body">
+          <h3>{{ item.title }}</h3>
+          <p class="text-muted">{{ item.category }} • {{ item.condition }} • {{ item.urgency_level }}</p>
+          <p>{{ item.description }}</p>
+          <p><strong>Location:</strong> {{ item.location or 'N/A' }}</p>
+
+          <div class="d-flex gap-2 mt-3">
+            {% if current_user.is_authenticated %}
+              <a href="{{ url_for('main.add_bookmark', item_id=item.item_id) }}" class="btn btn-outline-primary">Bookmark</a>
+              <a href="{{ url_for('main.start_chat', item_id=item.item_id, other_user_id=item.user_id) }}" class="btn btn-primary">Chat</a>
+              <a href="{{ url_for('main.donate', item_id=item.item_id) }}" class="btn btn-success">Donate</a>
+              <a href="{{ url_for('main.report', item_id=item.item_id) }}" class="btn btn-danger">Report</a>
+            {% else %}
+              <a href="{{ url_for('main.login') }}" class="btn btn-primary">Login to interact</a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card shadow p-3">
+        <h5>Item Details</h5>
+        <ul class="list-unstyled">
+          <li><strong>Posted:</strong> {{ item.created_at.strftime('%Y-%m-%d') }}</li>
+          <li><strong>Status:</strong> {{ item.status }}</li>
+          <li><strong>Expected Return:</strong> {{ item.expected_return or '—' }}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

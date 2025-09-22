@@ -1,0 +1,30 @@
+{# templates/features/disaster_donation.html #} 
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  <h2 class="mb-4">Donate Item</h2>
+
+  <div class="card mb-4 shadow p-3">
+    <h5>{{ need.category }}</h5>
+    <p>{{ need.description[:200] }}{% if need.description|length > 200 %}…{% endif %}</p>
+    <p class="small text-muted">Location: {{ need.location }}</p>
+  </div>
+
+  <form method="POST">
+    {{ form.hidden_tag() }}
+    <div class="row g-3">
+      <div class="col-md-6">
+        {{ form.expiry_date.label(class="form-label") }}
+        {{ form.expiry_date(class="form-control") }}
+      </div>
+      <div class="col-md-6">
+        {{ form.manufacture_date.label(class="form-label") }}
+        {{ form.manufacture_date(class="form-control") }}
+      </div>
+    </div>
+    <div class="d-grid mt-3">
+      {{ form.submit(class="btn btn-success") }}
+    </div>
+  </form>
+</div>
+{% endblock %}

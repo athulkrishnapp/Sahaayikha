@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  <h2 class="mb-4">Edit Item</h2>
+  <form method="POST" enctype="multipart/form-data">
+    {{ form.hidden_tag() }}
+
+    <div class="mb-3">
+      {{ form.title.label(class="form-label") }}
+      {{ form.title(class="form-control", value=item.title) }}
+      {% for error in form.title.errors %}
+        <div class="text-danger small">{{ error }}</div>
+      {% endfor %}
+    </div>
+
+    <div class="mb-3">
+      {{ form.description.label(class="form-label") }}
+      {{ form.description(class="form-control", rows="4") }}
+      {% for error in form.description.errors %}
+        <div class="text-danger small">{{ error }}</div>
+      {% endfor %}
+    </div>
+
+    <div class="row g-3">
+      <div class="col-md-4">
+        {{ form.category.label(class="form-label") }}
+        {{ form.category(class="form-select") }}
+      </div>
+      <div class="col-md-4">
+        {{ form.type.label(class="form-label") }}
+        {{ form.type(class="form-select") }}
+      </div>
+      <div class="col-md-4">
+        {{ form.condition.label(class="form-label") }}
+        {{ form.condition(class="form-select") }}
+      </div>
+    </div>
+
+    <div class="row g-3 mt-3">
+      <div class="col-md-6">
+        {{ form.urgency_level.label(class="form-label") }}
+        {{ form.urgency_level(class="form-select") }}
+      </div>
+      <div class="col-md-6">
+        {{ form.expected_return.label(class="form-label") }}
+        {% if form.type.data == 'Trade' %}
+          {{ form.expected_return(class="form-select") }}
+        {% else %}
+          {{ form.expected_return(class="form-control") }}
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="mb-3 mt-3">
+      {{ form.images.label(class="form-label") }}
+      {{ form.images(class="form-control", multiple=True) }}
+    </div>
+
+    <div class="d-grid mt-3">
+      {{ form.submit(class="btn btn-primary") }}
+    </div>
+  </form>
+</div>
+{% endblock %}

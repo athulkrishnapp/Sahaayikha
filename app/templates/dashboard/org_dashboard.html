@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>My Dashboard</h2>
+    <a href="{{ url_for('main.profile') }}" class="btn btn-secondary">Go to Profile</a>
+  </div>
+
+  <!-- Sections Row -->
+  <div class="row g-4 mb-4">
+    <!-- Trade Section -->
+    <div class="col-md-6 col-lg-3">
+      <div class="card shadow text-center p-3 h-100">
+        <h5>Trade Items</h5>
+        <p>{{ items|selectattr('type', 'equalto', 'Trade')|list|length }} items</p>
+        <a href="{{ url_for('main.dashboard') }}?filter=Trade" class="btn btn-primary btn-sm">View</a>
+      </div>
+    </div>
+
+    <!-- Donation Section -->
+    <div class="col-md-6 col-lg-3">
+      <div class="card shadow text-center p-3 h-100">
+        <h5>Donated Items</h5>
+        <p>{{ donations|length }} donations</p>
+        <a href="{{ url_for('main.dashboard') }}?filter=Donation" class="btn btn-success btn-sm">View</a>
+      </div>
+    </div>
+
+    <!-- Disaster Section -->
+    <div class="col-md-6 col-lg-3">
+      <div class="card shadow text-center p-3 h-100">
+        <h5>Disaster Contributions</h5>
+        <p>{{ items|selectattr('type', 'equalto', 'Disaster')|list|length }} items</p>
+        <a href="{{ url_for('main.dashboard') }}?filter=Disaster" class="btn btn-warning btn-sm">View</a>
+      </div>
+    </div>
+
+    <!-- Posting Section -->
+    <div class="col-md-6 col-lg-3">
+      <div class="card shadow text-center p-3 h-100">
+        <h5>Post New</h5>
+        <p>Create a new post</p>
+        <a href="{{ url_for('main.new_item') }}" class="btn btn-primary btn-sm">Post Item</a>
+        <a href="{{ url_for('main.disaster_needs') }}" class="btn btn-warning btn-sm mt-2">Post Need</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Items List -->
+  <div class="row g-4">
+    {% for item in items %}
+      <div class="col-md-4 d-flex align-items-stretch">
+        <div class="card shadow h-100 d-flex flex-column">
+          {% if item.images.first() %}
+            <img src="{{ url_for('static', filename=item.images.first().image_url) }}" class="card-img-top" alt="{{ item.title }}">
+          {% else %}
+            <img src="{{ url_for('static', filename='images/item_placeholder.jpg') }}" class="card-img-top" alt="{{ item.title }}">
+          {% endif %}
+
+          <div class="card-body d-flex flex-column">
+            <h5 class="card-title">{{ item.title }}</h5>
+            <p class="card-text small text-muted">{{ item.category }} • {{ item.condition }} • {{ item.type }}</p>
+            <p class="card-text flex-grow-1">{{ item.description[:100] }}{% if item.description|length > 100 %}...{% endif %}</p>
+            <a href="{{ url_for('main.view_item', item_id=item.item_id) }}" class="btn btn-primary btn-sm mt-auto">View Details</a>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}
