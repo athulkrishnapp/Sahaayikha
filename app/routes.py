@@ -137,12 +137,8 @@ def register():
 
 @main.route("/login", methods=["GET", "POST"])
 def login():
-    if current_user.is_authenticated:
-        obj = current_user._get_current_object()
-        if isinstance(obj, Admin):
-            return redirect(url_for("main.admin_dashboard"))
-        if isinstance(obj, Organization):
-            return redirect(url_for("main.org_dashboard"))
+    # Only redirect if already logged in as User
+    if current_user.is_authenticated and isinstance(current_user._get_current_object(), User):
         return redirect(url_for("main.dashboard"))
 
     form = LoginForm()
@@ -155,15 +151,9 @@ def login():
             flash("Logged in successfully.", "success")
             return redirect(url_for("main.dashboard"))
 
-        # Invalid credentials
         flash("Invalid email or password.", "danger")
-    else:
-        for field, errors in form.errors.items():
-            for error in errors:
-                flash(f"{getattr(form, field).label.text}: {error}", "danger")
 
     return render_template("auth/user_login.html", form=form)
-
 
 
 @main.route("/logout")
@@ -217,16 +207,19 @@ def profile():
 def admin_login():
     if current_user.is_authenticated and isinstance(current_user._get_current_object(), Admin):
         return redirect(url_for("main.admin_dashboard"))
+
     form = LoginForm()
     if form.validate_on_submit():
         admin = Admin.query.filter_by(email=form.email.data).first()
         if admin and admin.check_password(form.password.data):
             login_user(admin, remember=form.remember.data)
-            db.session.add(LoginLog(user_id=admin.admin_id, ip_address=request.remote_addr))
-            db.session.commit()
+            # db.session.add(LoginLog(user_id=admin.admin_id, ip_address=request.remote_addr))
+            # db.session.commit()
             flash("Admin logged in.", "success")
             return redirect(url_for("main.admin_dashboard"))
+
         flash("Invalid admin credentials.", "danger")
+
     return render_template("auth/admin_login.html", title="Admin Login", form=form)
 
 
@@ -399,16 +392,13 @@ def org_login():
                 flash("Organization not yet approved.", "warning")
                 return render_template("auth/org_login.html", form=form)
             login_user(org, remember=form.remember.data)
-            db.session.add(LoginLog(user_id=org.org_id, ip_address=request.remote_addr))
-            db.session.commit()
+            # db.session.add(LoginLog(user_id=org.org_id, ip_address=request.remote_addr))
+            # db.session.commit()
             flash("Organization logged in successfully.", "success")
             return redirect(url_for("main.org_dashboard"))
 
+
         flash("Invalid email or password.", "danger")
-    else:
-        for field, errors in form.errors.items():
-            for error in errors:
-                flash(f"{getattr(form, field).label.text}: {error}", "danger")
 
     return render_template("auth/org_login.html", form=form)
 

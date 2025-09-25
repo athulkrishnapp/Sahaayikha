@@ -34,41 +34,49 @@
 </head>
 <body id="mainBody">
 
-  <!-- Navbar -->
-  <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
-    <div class="container">
-      <button class="btn btn-outline-primary me-3" id="backBtn">
+ <!-- Navbar -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+  <div class="container-fluid"> <!-- changed from container to container-fluid -->
+    
+    <!-- Left Side: Back Button + Logo -->
+    <div class="d-flex align-items-center">
+      <button class="btn btn-outline-primary me-2" id="backBtn">
         <i class="fas fa-arrow-left"></i>
       </button>
 
-      <a class="navbar-brand fw-bold" href="{{ url_for('main.home') }}">
+      <a class="navbar-brand fw-bold ms-2" href="{{ url_for('main.home') }}">
         <i class="fas fa-hands-helping text-primary"></i> Sahaayikha
       </a>
-
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" 
-              data-bs-target="#navbarNav" aria-controls="navbarNav" 
-              aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-
-      <div class="collapse navbar-collapse" id="navbarNav">
-        <ul class="navbar-nav ms-auto align-items-center">
-          {% if current_user.is_authenticated %}
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('main.logout') }}">Logout</a></li>
-          {% else %}
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('main.login') }}">Login</a></li>
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('main.register') }}">Register</a></li>
-          {% endif %}
-          <li class="nav-item ms-2">
-            <button id="darkModeToggle" class="btn btn-sm btn-outline-secondary">
-              <i class="fas fa-moon"></i>
-            </button>
-          </li>
-        </ul>
-      </div>
     </div>
-  </nav>
+
+    <!-- Navbar Toggle for Mobile -->
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" 
+            data-bs-target="#navbarNav" aria-controls="navbarNav" 
+            aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <!-- Right Side: Menu Items -->
+    <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
+      <ul class="navbar-nav align-items-center">
+        {% if current_user.is_authenticated %}
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.logout') }}">Logout</a></li>
+        {% else %}
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.login') }}">Login</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.register') }}">Register</a></li>
+        {% endif %}
+        <li class="nav-item ms-2">
+          <button id="darkModeToggle" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-moon"></i>
+          </button>
+        </li>
+      </ul>
+    </div>
+
+  </div>
+</nav>
+
 
   <!-- Flash Messages -->
   {% with messages = get_flashed_messages(with_categories=true) %}

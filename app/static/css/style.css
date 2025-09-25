@@ -323,3 +323,37 @@ form .form-select:focus {
     -webkit-line-clamp: 3;    /* max 3 lines */
     -webkit-box-orient: vertical;
 }
+
+/* ===========================
+   Fix for Links & Navbar Text in Dark Mode
+=========================== */
+.dark-mode a,
+.dark-mode .navbar-nav .nav-link,
+.dark-mode .navbar-brand {
+    color: #e0e0e0 !important;   /* light text */
+}
+
+.dark-mode a:hover,
+.dark-mode .navbar-nav .nav-link:hover,
+.dark-mode .navbar-brand:hover {
+    color: #ffffff !important;   /* brighter on hover */
+}
+
+/* ===========================
+   Fix for Buttons in Dark Mode
+=========================== */
+.dark-mode .btn-primary,
+.dark-mode .btn-success,
+.dark-mode .btn-danger,
+.dark-mode .btn-outline-primary,
+.dark-mode .btn-outline-success {
+    color: #fff !important;
+    border-color: transparent !important;
+}
+
+.dark-mode .btn-primary { background-color: #0069d9 !important; }
+.dark-mode .btn-success { background-color: #28a745 !important; }
+.dark-mode .btn-danger  { background-color: #dc3545 !important; }
+
+.dark-mode .btn-outline-primary { background-color: #0069d9 !important; }
+.dark-mode .btn-outline-success { background-color: #28a745 !important; }
