@@ -188,6 +188,9 @@ class DisasterNeed(db.Model):
 
 
 # ---------- DISASTER DONATIONS ----------
+from datetime import datetime
+from app import db
+
 class DisasterDonation(db.Model):
     __tablename__ = "disaster_donations"
     donation_id = db.Column(db.Integer, primary_key=True)
@@ -198,6 +201,8 @@ class DisasterDonation(db.Model):
     expiry_date = db.Column(db.Date, nullable=True)
     manufacture_date = db.Column(db.Date, nullable=True)
     verified_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)  # NEW column
+
 
 
 # ---------- FEEDBACK ----------

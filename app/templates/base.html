@@ -36,13 +36,15 @@
 
  <!-- Navbar -->
 <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
-  <div class="container-fluid"> <!-- changed from container to container-fluid -->
+  <div class="container-fluid">
     
     <!-- Left Side: Back Button + Logo -->
     <div class="d-flex align-items-center">
-      <button class="btn btn-outline-primary me-2" id="backBtn">
-        <i class="fas fa-arrow-left"></i>
-      </button>
+      {% if request.endpoint != 'main.home' %}
+        <button class="btn btn-outline-primary me-2" id="backBtn">
+          <i class="fas fa-arrow-left"></i>
+        </button>
+      {% endif %}
 
       <a class="navbar-brand fw-bold ms-2" href="{{ url_for('main.home') }}">
         <i class="fas fa-hands-helping text-primary"></i> Sahaayikha
@@ -56,15 +58,28 @@
       <span class="navbar-toggler-icon"></span>
     </button>
 
-    <!-- Right Side: Menu Items -->
+   <!-- Right Side: Menu Items -->
     <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
       <ul class="navbar-nav align-items-center">
         {% if current_user.is_authenticated %}
-          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+          <li class="nav-item">
+            <a class="nav-link" href="
+              {% if current_user.is_authenticated %}
+                {% if current_user.__class__.__name__ == 'User' %}{{ url_for('main.dashboard') }}
+                {% elif current_user.__class__.__name__ == 'Organization' %}{{ url_for('main.org_dashboard') }}
+                {% elif current_user.__class__.__name__ == 'Admin' %}{{ url_for('main.admin_dashboard') }}
+                {% else %}# 
+                {% endif %}
+              {% else %}# 
+              {% endif %}
+            ">
+              Dashboard
+            </a>
+          </li>
           <li class="nav-item"><a class="nav-link" href="{{ url_for('main.logout') }}">Logout</a></li>
         {% else %}
-          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.login') }}">Login</a></li>
-          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.register') }}">Register</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.auth_login_selector') }}">Login</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('main.auth_register_selector') }}">Register</a></li>
         {% endif %}
         <li class="nav-item ms-2">
           <button id="darkModeToggle" class="btn btn-sm btn-outline-secondary">
@@ -73,7 +88,6 @@
         </li>
       </ul>
     </div>
-
   </div>
 </nav>
 

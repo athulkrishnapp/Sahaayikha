@@ -1,141 +1,341 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container py-4">
-
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>My Dashboard</h2>
-    <a href="{{ url_for('main.profile') }}" class="btn btn-secondary">Go to Profile</a>
-  </div>
-
-  <!-- Sections Row -->
-  <div class="row g-4 mb-4">
-    <!-- Trade Section -->
-    <div class="col-md-6 col-lg-4">
-      <div class="card shadow text-center p-3">
-        <h5>Trade Items</h5>
-        <a href="{{ url_for('main.dashboard') }}?filter=Trade" class="btn btn-primary btn-sm">View</a>
-      </div>
-    </div>
-
-    <!-- Donation Section -->
-    <div class="col-md-6 col-lg-4">
-      <div class="card shadow text-center p-3">
-        <h5>Donated Items</h5>
-        <a href="{{ url_for('main.dashboard') }}?filter=Donation" class="btn btn-success btn-sm">View</a>
-      </div>
-    </div>
-
-    <!-- Disaster Section -->
-    <div class="col-md-6 col-lg-4">
-      <div class="card shadow text-center p-3">
-        <h5>Disaster Contributions</h5>
-        <a href="{{ url_for('main.dashboard') }}?filter=Disaster" class="btn btn-warning btn-sm">View</a>
-      </div>
-    </div>
-  </div>
-
-  <!-- Items List -->
-  <div class="row g-4">
-    {% for item in items %}
-      <div class="col-md-4">
-        <div class="card shadow item-card h-100">
-          {% if item.images.first() %}
-            <div class="item-image-wrapper portrait">
-              <img src="{{ url_for('static', filename=item.images.first().image_url) }}" alt="{{ item.title }}">
-            </div>
-          {% else %}
-            <div class="item-image-wrapper portrait">
-              <img src="{{ url_for('static', filename='images/item_placeholder.jpg') }}" alt="{{ item.title }}">
-            </div>
-          {% endif %}
-          <div class="card-body d-flex flex-column">
-            <h5 class="card-title">{{ item.title }}</h5>
-            <p class="card-text small text-muted">{{ item.category }} • {{ item.condition }} • {{ item.type }}</p>
-            <p class="card-text description-text flex-grow-1">
-              {{ item.description[:120] }}{% if item.description|length > 120 %}...{% endif %}
-            </p>
-            <a href="{{ url_for('main.view_item', item_id=item.item_id) }}" class="btn btn-primary btn-sm mt-auto">View Details</a>
-          </div>
-        </div>
-      </div>
-    {% endfor %}
-  </div>
-</div>
-
-<!-- Floating Post Button -->
-<div class="floating-post-btn-container">
-  <div class="floating-post-options" id="postOptions">
-    <a href="{{ url_for('main.new_item') }}" class="btn btn-primary btn-sm mb-2 w-100">Post Item</a>
-    <a href="{{ url_for('main.disaster_needs') }}" class="btn btn-warning btn-sm w-100">Post Need</a>
-  </div>
-  <button class="floating-post-btn" id="postToggleBtn">+</button>
-</div>
 
 <style>
-/* Floating Button Container */
-.floating-post-btn-container {
-  position: fixed;
-  bottom: 30px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 9999;
-  display: flex;
-  flex-direction: column; /* Stack vertically */
-  align-items: center;
-  gap: 10px;
-}
+    /* ---------------------------------- */
+    /* --- Modern Dashboard Design System --- */
+    /* ---------------------------------- */
+    :root {
+        --primary: hsl(260, 84%, 60%);
+        --primary-foreground: hsl(0, 0%, 100%);
+        --secondary: hsl(240, 4.8%, 95.9%);
+        --secondary-foreground: hsl(240, 5.9%, 10%);
+        --background: hsl(0, 0%, 100%);
+        --foreground: hsl(240, 10%, 3.9%);
+        --card: hsl(0, 0%, 100%);
+        --card-foreground: hsl(240, 10%, 3.9%);
+        --border: hsl(240, 5.9%, 90%);
+        --muted: hsl(240, 4.8%, 95.9%);
+        --muted-foreground: hsl(240, 3.8%, 46.1%);
+        --shadow-card: 0 5px 15px -3px hsl(240 10% 50% / 0.08); /* Adjusted shadow */
+        --shadow-fab: 0 10px 20px -5px hsl(260 84% 60% / 0.4);
+        --radius: 0.75rem;
 
-/* Round Plus Button */
-.floating-post-btn {
-  width: 70px;
-  height: 70px;
-  border-radius: 50%;
-  border: none;
-  background: linear-gradient(135deg, #007bff, #00d4ff);
-  color: white;
-  font-size: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding-top: .1rem;
-  cursor: pointer;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.3);
-  transition: transform 0.3s, box-shadow 0.3s;
-}
+        /* New variables for transparent backgrounds */
+        --item-content-bg-light: rgba(255, 255, 255, 0.7);
+        --item-content-border-light: rgba(240, 240, 240, 0.5);
+    }
 
-.floating-post-btn:hover {
-  transform: scale(1.15);
-  box-shadow: 0 12px 25px rgba(0,0,0,0.4);
-}
+    .dark-mode {
+        --primary: hsl(260, 84%, 70%);
+        --secondary: hsl(240, 3.7%, 15.9%);
+        --secondary-foreground: hsl(0, 0%, 98%);
+        --background: hsl(240, 10%, 3.9%);
+        --foreground: hsl(0, 0%, 98%);
+        --card: hsl(240, 3.7%, 15.9%);
+        --card-foreground: hsl(0, 0%, 98%);
+        --border: hsl(240, 3.7%, 25%);
+        --muted: hsl(240, 3.7%, 15.9%);
+        --muted-foreground: hsl(240, 5%, 64.9%);
+        --shadow-card: 0 5px 15px -3px hsl(240 10% 5% / 0.2); /* Dark mode shadow */
 
-/* Pop-up Options (hidden by default) */
-.floating-post-options {
-  display: none;
-  flex-direction: column;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 10px; /* Space between options and button */
-}
+        /* Dark mode variables for transparent backgrounds */
+        --item-content-bg-dark: rgba(25, 25, 35, 0.7); /* Slightly darker transparent */
+        --item-content-border-dark: rgba(50, 50, 60, 0.5);
+    }
 
-.floating-post-options a {
-  display: block;
-  min-width: 150px;
-  text-align: center;
-}
+    /* Base Styles */
+    .dashboard-container { max-width: 1400px; margin: 0 auto; padding: 0 1.5rem; }
+
+    /* Header */
+    .dashboard-header {
+        background: var(--background); backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border); position: sticky;
+        top: 0; z-index: 40; margin-bottom: 2rem;
+    }
+    .header-content { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; padding: 1.5rem 0; }
+    .header-content h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .header-content p { color: var(--muted-foreground); font-size: 0.875rem; }
+    .header-actions .btn { margin-left: 0.5rem; }
+
+    /* Buttons & Badges */
+    .btn-dashboard {
+        display: inline-flex; align-items: center; justify-content: center;
+        gap: 0.5rem; padding: 0.5rem 1rem; border-radius: var(--radius);
+        font-size: 0.875rem; font-weight: 500; border: none; cursor: pointer;
+        transition: all 0.2s ease; text-decoration: none;
+    }
+    .btn-primary-dashboard { background: var(--primary); color: var(--primary-foreground); }
+    .btn-primary-dashboard:hover { background: hsl(260, 84%, 55%); }
+    .dark-mode .btn-primary-dashboard:hover { background: hsl(260, 84%, 75%); }
+    .btn-outline-dashboard { background: transparent; color: var(--foreground); border: 1px solid var(--border); }
+    .btn-outline-dashboard:hover { background: var(--secondary); }
+
+    .badge-dashboard {
+        padding: 0.25rem 0.6rem; background: var(--secondary);
+        color: var(--secondary-foreground); border-radius: 0.5rem;
+        font-size: 0.75rem; font-weight: 500;
+    }
+
+    /* Section & Grid Layout */
+    .section { margin-bottom: 3rem; }
+    .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .section h2 { font-size: 1.5rem; font-weight: 600; }
+    
+    /* Grid for Action Cards (3 columns) */
+    .action-grid { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+
+    /* --- ITEM GRID CORRECTION (4-5 columns) --- */
+    .item-grid {
+        display: grid;
+        gap: 1.5rem;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); /* Slightly smaller min-width for more cards */
+    }
+    /* On very large screens, explicitly set 5 columns */
+    @media (min-width: 1400px) {
+        .item-grid { grid-template-columns: repeat(5, 1fr); }
+    }
+    /* On screens where 4 fit well */
+    @media (min-width: 1024px) and (max-width: 1399px) {
+        .item-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+
+
+    /* Action Cards */
+    .action-card {
+        border-radius: 1rem; padding: 2rem; text-align: center;
+        transition: all 0.3s ease; text-decoration: none; color: var(--card-foreground);
+        border: 1px solid var(--border);
+    }
+    .action-card:hover { transform: scale(1.03); box-shadow: var(--shadow-card); }
+    .action-card-icon { color: var(--primary); font-size: 2rem; margin-bottom: 1rem; }
+    .action-card h3 { font-size: 1.25rem; font-weight: 600; }
+    .action-card-trade { background: hsl(220 84% 97%); border-color: hsl(220 84% 90%); }
+    .action-card-trade .action-card-icon { color: hsl(220 84% 55%); }
+    .dark-mode .action-card-trade { background: hsl(220 84% 15%); border-color: hsl(220 84% 25%); }
+    .action-card-donation { background: hsl(142 71% 97%); border-color: hsl(142 71% 45%); } /* Adjusted icon color for visibility */
+    .action-card-donation .action-card-icon { color: hsl(142 71% 45%); }
+    .dark-mode .action-card-donation { background: hsl(142 71% 15%); border-color: hsl(142 71% 25%); }
+    .action-card-disaster { background: hsl(25 95% 97%); border-color: hsl(25 95% 90%); }
+    .action-card-disaster .action-card-icon { color: hsl(25 95% 53%); }
+    .dark-mode .action-card-disaster { background: hsl(25 95% 15%); border-color: hsl(25 95% 25%); }
+
+    /* --- ITEM CARD CORRECTIONS --- */
+    .dashboard-item-card {
+        background: var(--card);
+        border-radius: var(--radius);
+        border: 1px solid var(--border);
+        overflow: hidden;
+        transition: all 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        height: 100%; /* Ensure cards fill grid cell height */
+    }
+    .dashboard-item-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-card); } /* Slightly lighter hover */
+
+    .item-image {
+        position: relative;
+        width: 100%;
+        padding-top: 56.25%; /* 16:9 Aspect Ratio (9 / 16 * 100%) */
+        background: var(--muted);
+        overflow: hidden;
+    }
+    .item-image img {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover; /* Ensures the image fills the container without distortion */
+        transition: transform 0.3s ease;
+    }
+    .dashboard-item-card:hover .item-image img {
+        transform: scale(1.05); /* Slight zoom on image hover */
+    }
+
+    /* Transparent background for content area */
+    .item-content {
+        padding: 1rem;
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        background: var(--item-content-bg-light); /* Light mode transparent */
+        border-top: 1px solid var(--item-content-border-light);
+        transition: background 0.3s ease, border-color 0.3s ease;
+    }
+    .dark-mode .item-content {
+        background: var(--item-content-bg-dark); /* Dark mode transparent */
+        border-top: 1px solid var(--item-content-border-dark);
+    }
+
+    .item-title { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .item-badges { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+    .item-description {
+        color: var(--muted-foreground); font-size: 0.875rem; flex-grow: 1; margin-bottom: 1rem;
+        display: -webkit-box;
+        -webkit-line-clamp: 3; /* Limit description to 3 lines */
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.4; /* Better readability */
+    }
+    .item-content .btn-dashboard { margin-top: auto; } /* Keep button at the bottom */
+
+
+    /* --- REDESIGNED FLOATING ACTION BUTTON (already enhanced) --- */
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.5); }
+        70% { box-shadow: 0 0 0 15px hsl(var(--primary) / 0); }
+        100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0); }
+    }
+    .fab-container { position: fixed; bottom: 2rem; right: 2rem; z-index: 50; }
+    .fab-options { list-style: none; padding: 0; margin: 0 0 1rem 0; display: flex; flex-direction: column; align-items: flex-end; gap: 1rem; }
+    .fab-option { display: flex; align-items: center; opacity: 0; transform: translateY(10px); transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    .fab-container.active .fab-option { opacity: 1; transform: translateY(0); }
+    .fab-container.active .fab-option:nth-child(1) { transition-delay: 0.1s; }
+    .fab-container.active .fab-option:nth-child(2) { transition-delay: 0.05s; }
+    
+    .fab-option .label {
+        background: var(--card); color: var(--card-foreground); padding: 5px 12px;
+        border-radius: var(--radius); margin-right: 1rem; font-size: 0.9rem;
+        font-weight: 500; box-shadow: var(--shadow-card);
+    }
+    .fab-option .icon-wrapper {
+        width: 3rem; height: 3rem; display: flex; align-items: center; justify-content: center;
+        border-radius: 50%; color: var(--primary-foreground); box-shadow: var(--shadow-card);
+        background: var(--card); color: var(--card-foreground);
+    }
+    .fab-button {
+        width: 3.75rem; height: 3.75rem; border-radius: 50%; border: none;
+        background: var(--primary); color: white;
+        cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: var(--shadow-fab);
+        animation: pulse 2.5s infinite;
+    }
+    .fab-button:hover { transform: scale(1.1); animation-play-state: paused; }
+    .fab-button-icon { font-size: 1.5rem; transition: transform 0.3s ease; }
+    .fab-container.active .fab-button-icon { transform: rotate(45deg); }
+
+    /* Empty State */
+    .empty-state { text-align: center; padding: 3rem 0; background: var(--card); border: 1px dashed var(--border); border-radius: var(--radius); }
+    .empty-state i { font-size: 3rem; color: var(--muted-foreground); margin-bottom: 1rem; }
+    .empty-state h3 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; }
 </style>
 
-<script>
-const postBtn = document.getElementById('postToggleBtn');
-const postOptions = document.getElementById('postOptions');
+<header class="dashboard-header">
+    <div class="dashboard-container">
+        <div class="header-content">
+            <div>
+                <h1>User Dashboard</h1>
+                <p>Manage your items, donations, and trades.</p>
+            </div>
+            <div class="header-actions">
+                <a href="{{ url_for('main.dashboard', view='all') }}" class="btn-dashboard {{ 'btn-primary-dashboard' if view=='all' else 'btn-outline-dashboard' }}">All Items</a>
+                <a href="{{ url_for('main.dashboard', view='mine') }}" class="btn-dashboard {{ 'btn-primary-dashboard' if view=='mine' else 'btn-outline-dashboard' }}">My Items</a>
+                <a href="{{ url_for('main.profile') }}" class="btn-dashboard btn-outline-dashboard"><i class="fas fa-user"></i></a>
+            </div>
+        </div>
+    </div>
+</header>
 
-postBtn.addEventListener('click', () => {
-  if (postOptions.style.display === 'flex') {
-    postOptions.style.display = 'none';
-    postBtn.style.transform = 'rotate(0deg)';
-  } else {
-    postOptions.style.display = 'flex';
-    postBtn.style.transform = 'rotate(45deg)';
-  }
+<main class="dashboard-container">
+    <section class="section">
+        <div class="section-header">
+            <h2>Quick Actions</h2>
+        </div>
+        <div class="action-grid">
+            <a href="{{ url_for('main.dashboard', view=view, filter='Trade') }}" class="action-card action-card-trade">
+                <div class="action-card-icon"><i class="fas fa-exchange-alt"></i></div>
+                <h3>Trade Items</h3>
+            </a>
+            <a href="{{ url_for('main.dashboard', view=view, filter='Donation') }}" class="action-card action-card-donation">
+                <div class="action-card-icon"><i class="fas fa-heart"></i></div>
+                <h3>Donated Items</h3>
+            </a>
+            <a href="{{ url_for('main.dashboard', view=view, filter='Disaster') }}" class="action-card action-card-disaster">
+                <div class="action-card-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                <h3>Disaster Aid</h3>
+            </a>
+        </div>
+    </section>
+
+    <section class="section">
+        <div class="section-header">
+            <h2>{{ 'My Recent Items' if view=='mine' else 'All Recent Items' }}</h2>
+            <span class="badge-dashboard">{{ items|length }} total</span>
+        </div>
+
+        {% if items %}
+            <div class="item-grid">
+                {% for item in items %}
+                <div class="dashboard-item-card">
+                    <div class="item-image">
+                        <img src="{% if item.images.first() %}{{ url_for('static', filename=item.images.first().image_url) }}{% else %}{{ url_for('static', filename='images/item_placeholder.jpg') }}{% endif %}" alt="{{ item.title }}">
+                    </div>
+                    <div class="item-content">
+                        <h3 class="item-title">{{ item.title }}</h3>
+                        <div class="item-badges">
+                            <span class="badge-dashboard">{{ item.category }}</span>
+                            <span class="badge-dashboard">{{ item.condition }}</span>
+                            <span class="badge-dashboard">{{ item.type }}</span>
+                        </div>
+                        <p class="item-description">
+                            {{ item.description[:100] }}{% if item.description|length > 100 %}...{% endif %}
+                        </p>
+                        <a href="{{ url_for('main.view_item', item_id=item.item_id) }}" class="btn-dashboard btn-primary-dashboard mt-auto">View Details</a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <i class="fas fa-box-open"></i>
+                <h3>No items found</h3>
+                <p>There are no items matching the current filter.</p>
+                <a href="{{ url_for('main.new_item') }}" class="btn-dashboard btn-primary-dashboard">
+                    <i class="fas fa-plus"></i> Post Your First Item
+                </a>
+            </div>
+        {% endif %}
+    </section>
+</main>
+
+<div class="fab-container" id="fabContainer">
+    <ul class="fab-options">
+        <li class="fab-option">
+            <span class="label">Post Need</span>
+            <a href="{{ url_for('main.disaster_needs') }}" class="icon-wrapper" style="background: hsl(38, 92%, 52%);">
+                <i class="fas fa-bullhorn"></i>
+            </a>
+        </li>
+        <li class="fab-option">
+            <span class="label">Post Item</span>
+            <a href="{{ url_for('main.new_item') }}" class="icon-wrapper" style="background: var(--primary);">
+                <i class="fas fa-plus-circle"></i>
+            </a>
+        </li>
+    </ul>
+    <button class="fab-button" id="fabButton">
+        <i class="fas fa-plus fab-button-icon"></i>
+    </button>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const fabContainer = document.getElementById('fabContainer');
+    const fabButton = document.getElementById('fabButton');
+
+    fabButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fabContainer.classList.toggle('active');
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!fabContainer.contains(e.target) && fabContainer.classList.contains('active')) {
+            fabContainer.classList.remove('active');
+        }
+    });
 });
 </script>
 

@@ -77,6 +77,18 @@ def role_required(role):
         return wrapped
     return decorator
 
+# =========================
+# AUTH SELECTOR ROUTES
+# =========================
+@main.route("/auth/login")
+def auth_login_selector():
+    return render_template("auth_login.html")
+
+@main.route("/auth/register")
+def auth_register_selector():
+    return render_template("auth_reg.html")
+
+
 # -------------------------
 # HOME
 # -------------------------
@@ -404,22 +416,43 @@ def org_login():
 
 
 
+# -------------------------
+# ORG DASHBOARD
+# -------------------------
 @main.route("/org/dashboard")
 @login_required
 @role_required("org")
 def org_dashboard():
     org = current_user._get_current_object()
-    
-    # Organization shouldn't query Item (they don't post items)
-    needs = DisasterNeed.query.filter_by(org_id=org.org_id).all()
+    filter_type = request.args.get("filter")
+
+    # All active items EXCEPT this org’s own
+    all_items_query = Item.query.filter(
+        Item.status == "Active",
+        Item.user_id != org.org_id  # assuming org_id is used for DisasterNeed posting
+    )
+    if filter_type in ["Trade", "Disaster"]:
+        all_items_query = all_items_query.filter_by(type=filter_type)
+    all_items = all_items_query.order_by(Item.created_at.desc()).all()
+
+    # My posted disaster needs
+    my_items_query = DisasterNeed.query.filter_by(org_id=org.org_id)
+    if filter_type:
+        my_items_query = my_items_query.filter_by(category=filter_type)
+    my_items = my_items_query.order_by(DisasterNeed.posted_at.desc()).all()
+
     donations = DisasterDonation.query.filter_by(org_id=org.org_id).all()
-    
+
     return render_template(
         "dashboard/org_dashboard.html",
         org=org,
-        needs=needs,
+        all_items=all_items,
+        my_items=my_items,
         donations=donations
     )
+
+
+
 
 
 # =========================
@@ -429,27 +462,39 @@ def org_dashboard():
 @login_required
 @role_required("user")
 def dashboard():
+    view = request.args.get("view", "all")  # "all" or "mine"
     filter_type = request.args.get("filter")
 
-    query = Item.query.filter_by(user_id=current_user.user_id)
+    if view == "mine":
+        # Only my items
+        query = Item.query.filter_by(user_id=current_user.user_id)
+        donations = DisasterDonation.query.filter_by(user_id=current_user.user_id).all()
+    else:
+        # All active items EXCEPT my own
+        query = Item.query.filter(
+            Item.status == "Active",
+            Item.user_id != current_user.user_id
+        )
+        donations = DisasterDonation.query.filter_by(status="Pending").all()
 
+    # Apply type filter
     if filter_type == "Trade":
         query = query.filter_by(type="Trade")
     elif filter_type == "Disaster":
         query = query.filter_by(type="Disaster")
     elif filter_type == "Donation":
-        # donations are in a separate table
-        donations = DisasterDonation.query.filter_by(user_id=current_user.user_id).all()
-        return render_template("dashboard/user_dashboard.html", items=[], donations=donations)
+        return render_template("dashboard/user_dashboard.html", items=[], donations=donations, view=view)
 
-    items = query.all()
-    donations = DisasterDonation.query.filter_by(user_id=current_user.user_id).all()
+    items = query.order_by(Item.created_at.desc()).all()
 
     return render_template(
         "dashboard/user_dashboard.html",
         items=items,
-        donations=donations
+        donations=donations,
+        view=view
     )
+
+
 
 
 
@@ -510,6 +555,73 @@ def view_item(item_id):
 def item_history(item_id):
     history = ItemHistory.query.filter_by(item_id=item_id).order_by(ItemHistory.timestamp.desc()).all()
     return render_template("items/item_history.html", history=history, item_id=item_id)
+
+
+
+@main.route("/item/<int:item_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_item(item_id):
+    item = Item.query.get_or_404(item_id)
+
+    # Only owner can edit
+    if item.user_id != getattr(current_user, "user_id", None):
+        abort(403)
+
+    form = ItemForm(obj=item)
+    if form.validate_on_submit():
+        item.title = form.title.data
+        item.description = form.description.data
+        item.category = form.category.data
+        item.type = form.type.data
+        item.condition = form.condition.data
+        item.urgency_level = form.urgency_level.data
+        item.expected_return = form.expected_return.data
+        db.session.commit()
+
+    
+        # handle new images if uploaded
+        if form.images.data:
+            files = form.images.data if isinstance(form.images.data, list) else [form.images.data]
+            for f in files:
+                if f and f.filename:  
+                    f.save(os.path.join(ITEM_UPLOAD_FOLDER, filename))
+                    db.session.add(ItemImage(item_id=item.item_id, image_url=f"images/items/{filename}"))
+            db.session.commit()
+
+        flash("Item updated successfully.", "success")
+        return redirect(url_for("main.view_item", item_id=item.item_id))
+
+    return render_template("items/edit_item.html", form=form, item=item)
+
+
+
+
+@main.route("/item/<int:item_id>/delete", methods=["POST"])
+@login_required
+def delete_item(item_id):
+    item = Item.query.get_or_404(item_id)
+
+    # Only owner can delete
+    if item.user_id != getattr(current_user, "user_id", None):
+        abort(403)
+
+    # Delete associated images first
+    for img in item.images:
+        try:
+            os.remove(os.path.join(ITEM_UPLOAD_FOLDER, os.path.basename(img.image_url)))
+        except Exception:
+            pass
+        db.session.delete(img)
+
+    # Delete the item itself
+    db.session.delete(item)
+    db.session.commit()
+
+    flash("Item deleted successfully.", "success")
+    return redirect(url_for("main.dashboard"))
+
+
+
 
 
 # =========================
@@ -627,7 +739,7 @@ def feedback():
 
 @main.route("/report", methods=["GET", "POST"])
 @login_required
-def report():
+def report_general():
     form = ReportForm()
     if form.validate_on_submit():
         db.session.add(Report(
@@ -641,6 +753,25 @@ def report():
     return render_template("features/report.html", form=form)
 
 
+
+@main.route("/report/<int:item_id>", methods=["GET", "POST"])
+@login_required
+def report_item(item_id):
+    form = ReportForm()
+    if form.validate_on_submit():
+        db.session.add(Report(
+            reported_by=getattr(current_user, "user_id", None),
+            item_id=item_id,
+            reason=form.reason.data,
+            reported_at=datetime.utcnow()
+        ))
+        db.session.commit()
+        flash("Report submitted.", "success")
+        return redirect(url_for("main.dashboard"))
+    return render_template("features/report.html", form=form, item_id=item_id)
+
+
+
 # =========================
 # NOTIFICATIONS
 # =========================
@@ -649,6 +780,27 @@ def report():
 def notifications():
     notes = Notification.query.filter_by(user_id=getattr(current_user, "user_id", None)).order_by(Notification.sent_at.desc()).all()
     return render_template("features/notifications.html", notifications=notes)
+
+
+# =========================
+# Start CHAT
+# =========================
+
+@main.route("/item/<int:item_id>/chat")
+@login_required
+def start_chat(item_id):
+    item = Item.query.get_or_404(item_id)
+    # Assuming you chat with the item owner
+    other_user_id = item.user_id
+    # Check if session already exists
+    session = ChatSession.query.filter_by(item_id=item_id, user1_id=current_user.user_id, user2_id=other_user_id).first()
+    if not session:
+        session = ChatSession(item_id=item_id, user1_id=current_user.user_id, user2_id=other_user_id)
+        db.session.add(session)
+        db.session.commit()
+    return redirect(url_for("main.chat", session_id=session.session_id))
+
+
 
 
 # =========================
