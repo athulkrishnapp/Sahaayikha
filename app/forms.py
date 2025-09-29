@@ -6,6 +6,10 @@ from wtforms import (
 from wtforms.validators import DataRequired, Email, EqualTo, Length, Optional
 from flask_wtf.file import FileAllowed
 
+
+from wtforms import StringField, SubmitField, FileField
+from wtforms.validators import DataRequired, Length, Optional
+from flask_wtf.file import FileAllowed
 # -------------------------
 # Dropdown Choices
 # -------------------------
@@ -94,7 +98,7 @@ KERALA_LOCATIONS = sorted([
 
 
 CATEGORIES = [
-    ('', 'Select Expected Return'),
+    ('', 'Select your Product Category'),
     ('Books', 'Books'),
     ('Clothes', 'Clothes'),
     ('Electronics', 'Electronics'),
@@ -167,6 +171,7 @@ EXPECTED_RETURN_CHOICES = [
     ('Home Appliances', 'Home Appliances'),
     ('Jewelry', 'Jewelry'),
     ('Lamps & Lighting', 'Lamps & Lighting'),
+    ('Money', 'Money'),
     ('Musical Instruments', 'Musical Instruments'),
     ('Office Supplies', 'Office Supplies'),
     ('Outdoor Gear', 'Outdoor Gear'),
@@ -273,5 +278,6 @@ class CategoryFollowForm(FlaskForm):
 
 
 class ChatForm(FlaskForm):
-    message = StringField('Message', validators=[DataRequired(), Length(max=1000)])
+    message = StringField('Message', validators=[Optional(), Length(max=1000)])
+    image = FileField('Image', validators=[Optional(), FileAllowed(['jpg', 'png', 'jpeg', 'gif'])])
     submit = SubmitField('Send')

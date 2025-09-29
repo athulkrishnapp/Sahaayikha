@@ -113,6 +113,7 @@ class Item(db.Model):
     status = db.Column(db.String(50), default="Active")  # Active / Traded / Verified / Expired
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     expires_at = db.Column(db.DateTime, nullable=True)
+    deal_finalized_at = db.Column(db.DateTime, nullable=True)
 
     # Relationships
     histories = db.relationship("ItemHistory", backref="item", lazy="dynamic")
@@ -122,6 +123,21 @@ class Item(db.Model):
     reports = db.relationship("Report", backref="item", lazy="dynamic")
     verification_logs = db.relationship("OrganizationVerificationLog", backref="item", lazy="dynamic")
     images = db.relationship("ItemImage", backref="item", lazy="dynamic")
+
+class DealProposal(db.Model):
+    __tablename__ = "deal_proposals"
+    id = db.Column(db.Integer, primary_key=True)
+    chat_session_id = db.Column(db.Integer, db.ForeignKey("chat_sessions.session_id"), nullable=False, unique=True)
+    
+    # Track the status of each participant
+    # Status can be: 'pending', 'confirmed', 'rejected'
+    proposer_status = db.Column(db.String(50), default='pending', nullable=False)
+    owner_status = db.Column(db.String(50), default='pending', nullable=False)
+    
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship back to the chat session
+    session = db.relationship("ChatSession", backref=db.backref("deal_proposal", uselist=False))
 
 
 # ---------- ITEM IMAGES ----------
@@ -159,11 +175,16 @@ class ChatSession(db.Model):
 
 class ChatMessage(db.Model):
     __tablename__ = "chat_messages"
+    
+    # ## ENSURE THIS LINE EXISTS AND IS CORRECT ##
     message_id = db.Column(db.Integer, primary_key=True)
+    
     session_id = db.Column(db.Integer, db.ForeignKey("chat_sessions.session_id"), nullable=False)
     sender_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
-    message = db.Column(db.Text, nullable=False)
+    message = db.Column(db.Text, nullable=True)
+    image_url = db.Column(db.String(255), nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    deleted_at = db.Column(db.DateTime, nullable=True)
 
 
 # ---------- ORGANIZATION VERIFICATION LOG ----------
@@ -221,9 +242,13 @@ class Report(db.Model):
     report_id = db.Column(db.Integer, primary_key=True)
     reported_by = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
     item_id = db.Column(db.Integer, db.ForeignKey("items.item_id"), nullable=True)
+    
+    # ## ADD THIS LINE ##
+    chat_session_id = db.Column(db.Integer, db.ForeignKey("chat_sessions.session_id"), nullable=True)
+
     reason = db.Column(db.Text, nullable=False)
     reported_at = db.Column(db.DateTime, default=datetime.utcnow)
-    status = db.Column(db.String(50), default="Pending")  # Pending / Reviewed / Action Taken
+    status = db.Column(db.String(50), default="Pending")
 
 
 # ---------- BOOKMARK ----------

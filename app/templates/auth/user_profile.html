@@ -1,66 +1,107 @@
-{# templates/auth/user_profile.html #}
 {% extends "base.html" %}
 {% block content %}
+<style>
+    /* Profile Page Specific Styles */
+    .profile-container {
+        background-color: var(--bs-card-bg);
+        border-radius: 1rem;
+        border: 1px solid var(--bs-border-color);
+    }
+    .profile-sidebar {
+        padding: 2rem;
+        border-right: 1px solid var(--bs-border-color);
+    }
+    .dark-mode .profile-sidebar {
+        border-right-color: var(--bs-border-color-translucent);
+    }
+    .profile-content {
+        padding: 2rem;
+    }
+    @media (max-width: 992px) {
+        .profile-sidebar {
+            border-right: none;
+            border-bottom: 1px solid var(--bs-border-color);
+        }
+        .dark-mode .profile-sidebar {
+            border-bottom-color: var(--bs-border-color-translucent);
+        }
+    }
+    .blocked-user-info { display: flex; align-items: center; gap: 0.75rem; }
+    .blocked-user-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
+</style>
+
 <div class="container my-5">
-  <div class="row justify-content-center">
-    <div class="col-lg-8">
-      <div class="card shadow p-4 text-center">
-        
-        <!-- Profile Picture -->
-        <div class="mb-4">
-          {% if current_user.profile_picture %}
-            <img src="{{ url_for('static', filename=current_user.profile_picture) }}"
-                 alt="Profile Picture"
-                 class="rounded-circle img-thumbnail"
-                 style="width: 150px; height: 150px; object-fit: cover;">
-          {% else %}
-            <img src="{{ url_for('static', filename='images/users_placeholder.png') }}"
-                 alt="Profile Placeholder"
-                 class="rounded-circle img-thumbnail"
-                 style="width: 150px; height: 150px; object-fit: cover;">
-          {% endif %}
+    <div class="profile-container shadow-sm overflow-hidden">
+        <div class="row g-0">
+            <div class="col-lg-7 profile-sidebar">
+                <h3 class="mb-4 fw-bold">My Profile</h3>
+                <form method="POST" enctype="multipart/form-data" novalidate>
+                    {{ form.hidden_tag() }}
+
+                    {% set form_field = form.profile_picture %}
+                    {% set placeholder_img = 'images/users_placeholder.png' %}
+                    {% set current_img = current_user.profile_picture %}
+                    {% set delete_url = url_for('main.delete_profile_picture') %}
+                    {% include 'auth/_profile_uploader.html' %}
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.first_name.label(class="form-label") }}
+                            {{ form.first_name(class="form-control") }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.last_name.label(class="form-label") }}
+                            {{ form.last_name(class="form-control") }}
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        {{ form.email.label(class="form-label") }}
+                        {{ form.email(class="form-control", readonly=true, disabled=true) }}
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            {{ form.phone.label(class="form-label") }}
+                            {{ form.phone(class="form-control") }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            {{ form.location.label(class="form-label") }}
+                            {{ form.location(class="form-select") }}
+                        </div>
+                    </div>
+                    <div class="d-grid mt-3">
+                        <button type="submit" class="btn btn-primary">Update Profile</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="col-lg-5 profile-content">
+                <h4 class="mb-4 fw-bold">Account Settings</h4>
+                <div class="mb-4">
+                    <h5 class="mb-3">Blocked Users</h5>
+                    {% if blocked_chats %}
+                        <ul class="list-group">
+                            {% for chat in blocked_chats %}
+                                {% set other_user = chat.user2 if chat.user1_id == current_user.user_id else chat.user1 %}
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div class="blocked-user-info">
+                                        <img src="{{ url_for('static', filename=other_user.profile_picture or 'images/users_placeholder.png') }}" alt="{{ other_user.first_name }}" class="blocked-user-avatar">
+                                        <div>
+                                            <span>{{ other_user.first_name }} {{ other_user.last_name }}</span>
+                                            <small class="d-block text-muted">Re: {{ chat.item.title|truncate(20) }}</small>
+                                        </div>
+                                    </div>
+                                    <form action="{{ url_for('main.unblock_chat', session_id=chat.session_id) }}" method="POST">
+                                        <button type="submit" class="btn btn-sm btn-outline-secondary">Unblock</button>
+                                    </form>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-muted">You have not blocked any users.</p>
+                    {% endif %}
+                </div>
+                </div>
         </div>
-
-        <h3 class="mb-4">My Profile</h3>
-
-        <form method="POST" enctype="multipart/form-data" class="text-start">
-          {{ form.hidden_tag() }}
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              {{ form.first_name.label(class="form-label") }}
-              {{ form.first_name(class="form-control") }}
-            </div>
-            <div class="col-md-6 mb-3">
-              {{ form.last_name.label(class="form-label") }}
-              {{ form.last_name(class="form-control") }}
-            </div>
-          </div>
-          <div class="mb-3">
-            {{ form.email.label(class="form-label") }}
-            {{ form.email(class="form-control", readonly=true) }}
-          </div>
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              {{ form.phone.label(class="form-label") }}
-              {{ form.phone(class="form-control") }}
-            </div>
-            <div class="col-md-6 mb-3">
-              {{ form.location.label(class="form-label") }}
-              {{ form.location(class="form-select") }}
-            </div>
-          </div>
-          <div class="mb-3">
-            {{ form.profile_picture.label(class="form-label") }}
-            {{ form.profile_picture(class="form-control") }}
-          </div>
-
-          <!-- Changed submit button to Update -->
-          <div class="d-grid">
-            <button type="submit" class="btn btn-primary btn-lg">Update</button>
-          </div>
-        </form>
-      </div>
     </div>
-  </div>
 </div>
 {% endblock %}

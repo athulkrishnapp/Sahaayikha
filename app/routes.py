@@ -11,11 +11,13 @@ from flask_login import (
 )
 from werkzeug.utils import secure_filename
 
+from sqlalchemy import or_
+
 from app import db, login_manager
 from app.models import (
     User, Admin, Organization, LoginLog,
     Item, ItemImage, ItemHistory,
-    ChatSession, ChatMessage,
+    ChatSession, ChatMessage, DealProposal, # <-- Added here
     DisasterNeed, DisasterDonation,
     Feedback, Report, Bookmark,
     CategoryFollow, Notification
@@ -29,15 +31,23 @@ from app.forms import (
 
 main = Blueprint("main", __name__)
 
+from datetime import datetime
+from flask import jsonify, abort
+
+from datetime import datetime, timedelta
+
+from flask import jsonify
 # -------------------------
 # UPLOAD FOLDERS
 # -------------------------
 USER_UPLOAD_FOLDER = os.path.join("app", "static", "images", "profiles", "users")
 ORG_UPLOAD_FOLDER = os.path.join("app", "static", "images", "profiles", "orgs")
 ITEM_UPLOAD_FOLDER = os.path.join("app", "static", "images", "items")
+CHAT_UPLOAD_FOLDER = os.path.join("app", "static", "images", "chat_uploads") 
 os.makedirs(USER_UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(ORG_UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(ITEM_UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(CHAT_UPLOAD_FOLDER, exist_ok=True)
 
 # -------------------------
 # LOGIN MANAGER LOADER
@@ -77,6 +87,16 @@ def role_required(role):
         return wrapped
     return decorator
 
+
+# -------------------------
+# Local Date
+# -------------------------
+
+@main.app_template_filter('localdatetime')
+def localdatetime_filter(utc_dt):
+    # Assuming your server and users are in IST (UTC+5:30)
+    return utc_dt + timedelta(hours=5, minutes=30)
+
 # =========================
 # AUTH SELECTOR ROUTES
 # =========================
@@ -88,14 +108,42 @@ def auth_login_selector():
 def auth_register_selector():
     return render_template("auth_reg.html")
 
+# =========================
+# Shedular deletion
+# =========================
+
+
+def run_scheduled_deletions():
+    """A simple task to simulate a cron job for deleting items."""
+    now = datetime.utcnow()
+    thirty_days_ago = now - timedelta(days=30)
+    
+    # Find items to be soft-deleted
+    items_to_delete = Item.query.filter(
+        Item.status == 'Active',
+        or_(
+            Item.deal_finalized_at <= now,
+            Item.created_at <= thirty_days_ago
+        )
+    ).all()
+
+    for item in items_to_delete:
+        item.status = 'Deleted' # Soft delete
+        db.session.add(ItemHistory(item_id=item.item_id, action="Item automatically deleted."))
+    
+    if items_to_delete:
+        db.session.commit()
+
 
 # -------------------------
 # HOME
 # -------------------------
 @main.route("/")
 def home():
+    run_scheduled_deletions() # Check for deletions on each home page visit
     items = Item.query.filter_by(status="Active").order_by(Item.created_at.desc()).limit(8).all()
     return render_template("home.html", title="Home", items=items)
+
 
 # =========================
 # AUTH ROUTES
@@ -179,25 +227,40 @@ def logout():
 # -------------------------
 # PROFILE UPDATE
 # -------------------------
+# In app/routes.py
+
 @main.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():
     user = current_user._get_current_object()
+    
+    # ## NEW: Fetch blocked chat sessions ##
+    blocked_chats = []
+    if isinstance(user, User):
+        # Find all sessions where the status is 'Blocked' and the current user was involved
+        blocked_chats = ChatSession.query.filter(
+            ChatSession.status == 'Blocked',
+            or_(ChatSession.user1_id == user.user_id, ChatSession.user2_id == user.user_id)
+        ).all()
+    
     if isinstance(user, User):
         template = "auth/user_profile.html"
         form = RegistrationForm(obj=user)
     elif isinstance(user, Organization):
         template = "auth/org_profile.html"
-        form = OrganizationRegistrationForm()
+        form = OrganizationRegistrationForm(obj=user)
     else:
         flash("Profile not editable.", "warning")
         return redirect(url_for("main.home"))
+
+    form.password.validators = []
+    form.confirm_password.validators = []
 
     if form.validate_on_submit():
         if isinstance(user, User):
             user.first_name = form.first_name.data
             user.last_name = form.last_name.data
-        else:
+        else: 
             user.name = form.name.data
         user.phone = form.phone.data
         user.location = form.location.data
@@ -205,11 +268,53 @@ def profile():
             filename = secure_filename(form.profile_picture.data.filename)
             folder = USER_UPLOAD_FOLDER if isinstance(user, User) else ORG_UPLOAD_FOLDER
             form.profile_picture.data.save(os.path.join(folder, filename))
-            user.profile_picture = f"images/profiles/{'users' if isinstance(user, User) else 'orgs'}/{filename}"
+            if isinstance(user, User):
+                user.profile_picture = f"images/profiles/users/{filename}"
+            else:
+                user.profile_picture = f"images/profiles/orgs/{filename}"
         db.session.commit()
         flash("Profile updated successfully.", "success")
         return redirect(url_for("main.profile"))
-    return render_template(template, form=form)
+    
+    # Pass the blocked_chats list to the template
+    return render_template(template, form=form, blocked_chats=blocked_chats)
+
+@main.route('/profile/picture/delete', methods=['POST'])
+@login_required
+def delete_profile_picture():
+    """Deletes the user's or org's current profile picture."""
+    user = current_user._get_current_object()
+
+    if user.profile_picture:
+        try:
+            # Construct full path to the image and delete it
+            if isinstance(user, User):
+                folder = USER_UPLOAD_FOLDER
+                # ## CORRECTED PATH ##
+                placeholder = 'images/users_placeholder.png'
+            else:
+                folder = ORG_UPLOAD_FOLDER
+                # ## CORRECTED PATH ##
+                placeholder = 'images/orgs_placeholder.png'
+            
+            filename = os.path.basename(user.profile_picture)
+            file_path = os.path.join(folder, filename)
+
+            if os.path.exists(file_path):
+                os.remove(file_path)
+
+        except Exception as e:
+            print(f"Error deleting file: {e}")
+
+        user.profile_picture = None
+        db.session.commit()
+        
+        return jsonify({
+            'success': True, 
+            'placeholder_url': url_for('static', filename=placeholder)
+        })
+
+    return jsonify({'success': False, 'error': 'No profile picture to delete.'})
 
 
 # =========================
@@ -462,40 +567,46 @@ def org_dashboard():
 @login_required
 @role_required("user")
 def dashboard():
-    view = request.args.get("view", "all")  # "all" or "mine"
+    view = request.args.get("view", "all")
     filter_type = request.args.get("filter")
 
+    items = []
+    donations = []
+    chat_sessions = []
+
     if view == "mine":
-        # Only my items
         query = Item.query.filter_by(user_id=current_user.user_id)
+        # ## FIX 1: Added 'Share' to this list ##
+        if filter_type in ["Trade", "Disaster", "Share"]:
+            query = query.filter_by(type=filter_type)
+        items = query.order_by(Item.created_at.desc()).all()
         donations = DisasterDonation.query.filter_by(user_id=current_user.user_id).all()
-    else:
-        # All active items EXCEPT my own
-        query = Item.query.filter(
-            Item.status == "Active",
-            Item.user_id != current_user.user_id
-        )
+
+    elif view == "bookmarks":
+        user_bookmarks = Bookmark.query.filter_by(user_id=current_user.user_id).order_by(Bookmark.saved_at.desc()).all()
+        items = [b.item for b in user_bookmarks]
+
+    elif view == "chats":
+        chat_sessions = db.session.query(ChatSession).filter(
+            or_(ChatSession.user1_id == current_user.user_id, ChatSession.user2_id == current_user.user_id)
+        ).join(Item).order_by(ChatSession.started_at.desc()).all()
+        
+    else:  # Default to "all"
+        view = "all"
+        query = Item.query.filter(Item.status == "Active", Item.user_id != current_user.user_id)
+        # ## FIX 2: Added 'Share' to this list ##
+        if filter_type in ["Trade", "Disaster", "Share"]:
+            query = query.filter_by(type=filter_type)
+        items = query.order_by(Item.created_at.desc()).all()
         donations = DisasterDonation.query.filter_by(status="Pending").all()
-
-    # Apply type filter
-    if filter_type == "Trade":
-        query = query.filter_by(type="Trade")
-    elif filter_type == "Disaster":
-        query = query.filter_by(type="Disaster")
-    elif filter_type == "Donation":
-        return render_template("dashboard/user_dashboard.html", items=[], donations=donations, view=view)
-
-    items = query.order_by(Item.created_at.desc()).all()
 
     return render_template(
         "dashboard/user_dashboard.html",
         items=items,
         donations=donations,
+        chat_sessions=chat_sessions,
         view=view
     )
-
-
-
 
 
 # =========================
@@ -526,10 +637,12 @@ def new_item():
         if form.images.data:
             files = form.images.data if isinstance(form.images.data, list) else [form.images.data]
             for f in files:
-                filename = secure_filename(f.filename)
-                f.save(os.path.join(ITEM_UPLOAD_FOLDER, filename))
-                db.session.add(ItemImage(item_id=item.item_id, image_url=f"images/items/{filename}"))
+                if f and f.filename:
+                    filename = secure_filename(f.filename)  # ✅ define filename
+                    f.save(os.path.join(ITEM_UPLOAD_FOLDER, filename))
+                    db.session.add(ItemImage(item_id=item.item_id, image_url=f"images/items/{filename}"))
             db.session.commit()
+
 
         db.session.add(ItemHistory(
             item_id=item.item_id,
@@ -547,7 +660,65 @@ def new_item():
 @main.route("/item/<int:item_id>")
 def view_item(item_id):
     item = Item.query.get_or_404(item_id)
-    return render_template("items/view_item.html", item=item)
+    is_bookmarked = False
+    session = None
+    deal = None
+
+    if current_user.is_authenticated:
+        # Check bookmark status
+        if Bookmark.query.filter_by(user_id=current_user.user_id, item_id=item.item_id).first():
+            is_bookmarked = True
+        
+        # Find the chat session and deal proposal between the viewer and the owner
+        if item.user_id != current_user.user_id:
+            session = ChatSession.query.filter(
+                or_(
+                    (ChatSession.user1_id == current_user.user_id) & (ChatSession.user2_id == item.user_id),
+                    (ChatSession.user1_id == item.user_id) & (ChatSession.user2_id == current_user.user_id)
+                ),
+                ChatSession.item_id == item.item_id
+            ).first()
+
+            if session:
+                deal = DealProposal.query.filter_by(chat_session_id=session.session_id).first()
+
+    return render_template("items/view_item.html", item=item, is_bookmarked=is_bookmarked, session=session, deal=deal)
+
+
+@main.route('/deal/<int:session_id>/propose', methods=['POST'])
+@login_required
+def propose_deal(session_id):
+    decision = request.form.get('decision') # will be 'confirmed' or 'rejected'
+    session = ChatSession.query.get_or_404(session_id)
+    item = session.item
+
+    # Security check
+    if session.user1_id != current_user.user_id and session.user2_id != current_user.user_id:
+        abort(403)
+
+    # Find or create the deal proposal
+    deal = DealProposal.query.filter_by(chat_session_id=session_id).first()
+    if not deal:
+        deal = DealProposal(chat_session_id=session_id)
+        db.session.add(deal)
+
+    # Update the status for the current user
+    if item.user_id == current_user.user_id: # Current user is the owner
+        deal.owner_status = decision
+    else: # Current user is the proposer
+        deal.proposer_status = decision
+    
+    # Check if both have confirmed
+    if deal.owner_status == 'confirmed' and deal.proposer_status == 'confirmed':
+        item.deal_finalized_at = datetime.utcnow() + timedelta(hours=24)
+        flash('Both parties have confirmed the deal! This item will be removed in 24 hours.', 'success')
+    else:
+        # If anyone rejects or changes their mind, cancel the finalization
+        item.deal_finalized_at = None
+        flash('Your decision has been recorded.', 'info')
+        
+    db.session.commit()
+    return redirect(request.referrer or url_for('main.home'))
 
 
 @main.route("/item/<int:item_id>/history")
@@ -557,6 +728,38 @@ def item_history(item_id):
     return render_template("items/item_history.html", history=history, item_id=item_id)
 
 
+
+
+@main.route("/item/image/<int:image_id>/delete", methods=["POST"])
+@login_required
+def delete_item_image(image_id):
+    """Handles the AJAX request to delete an image."""
+    image = ItemImage.query.get_or_404(image_id)
+    item = image.item
+
+    # Security check: Ensure the current user owns the item linked to the image
+    if item.user_id != getattr(current_user, "user_id", None):
+        abort(403) # Forbidden
+
+    try:
+        # Construct the full path to the image file
+        file_path = os.path.join("app", "static", image.image_url)
+        
+        # Delete the physical file from your server
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+        # Delete the image record from the database
+        db.session.delete(image)
+        db.session.commit()
+
+        # Send a success response back to the JavaScript
+        return jsonify({"success": True})
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting image: {e}") # Log the error for debugging
+        return jsonify({"success": False, "error": "Server error, please try again."}), 500
 
 @main.route("/item/<int:item_id>/edit", methods=["GET", "POST"])
 @login_required
@@ -576,24 +779,25 @@ def edit_item(item_id):
         item.condition = form.condition.data
         item.urgency_level = form.urgency_level.data
         item.expected_return = form.expected_return.data
-        db.session.commit()
-
-    
-        # handle new images if uploaded
+        
+        # Handle newly uploaded images
         if form.images.data:
-            files = form.images.data if isinstance(form.images.data, list) else [form.images.data]
-            for f in files:
-                if f and f.filename:  
-                    f.save(os.path.join(ITEM_UPLOAD_FOLDER, filename))
-                    db.session.add(ItemImage(item_id=item.item_id, image_url=f"images/items/{filename}"))
-            db.session.commit()
-
+            for file_storage in form.images.data:
+                if file_storage and file_storage.filename:
+                    # FIX: Correctly get filename for each file and save it
+                    filename = secure_filename(file_storage.filename)
+                    file_path = os.path.join(ITEM_UPLOAD_FOLDER, filename)
+                    file_storage.save(file_path)
+                    
+                    # Create a new database record for the uploaded image
+                    new_image = ItemImage(item_id=item.item_id, image_url=f"images/items/{filename}")
+                    db.session.add(new_image)
+        
+        db.session.commit()
         flash("Item updated successfully.", "success")
         return redirect(url_for("main.view_item", item_id=item.item_id))
 
     return render_template("items/edit_item.html", form=form, item=item)
-
-
 
 
 @main.route("/item/<int:item_id>/delete", methods=["POST"])
@@ -627,7 +831,7 @@ def delete_item(item_id):
 # =========================
 # BOOKMARKS
 # =========================
-@main.route("/bookmark/<int:item_id>")
+@main.route("/bookmark/<int:item_id>", methods=['POST'])
 @login_required
 def add_bookmark(item_id):
     bookmark = Bookmark.query.filter_by(user_id=getattr(current_user, "user_id", None), item_id=item_id).first()
@@ -643,7 +847,29 @@ def add_bookmark(item_id):
         ))
         db.session.commit()
         flash("Item bookmarked.", "success")
+    # Redirect back to the page the user was on
     return redirect(request.referrer or url_for("main.dashboard"))
+
+
+# ADD THIS NEW ROUTE for deleting chats
+@main.route('/chat/<int:session_id>/delete', methods=['POST'])
+@login_required
+def delete_chat_session(session_id):
+    session = ChatSession.query.get_or_404(session_id)
+    
+    # Security check: ensure current user is part of the chat
+    if session.user1_id != current_user.user_id and session.user2_id != current_user.user_id:
+        abort(403)
+        
+    # Delete associated messages first
+    ChatMessage.query.filter_by(session_id=session_id).delete()
+    
+    # Now delete the session itself
+    db.session.delete(session)
+    db.session.commit()
+    
+    flash("Chat session has been deleted.", "success")
+    return redirect(url_for('main.dashboard', view='chats'))
 
 
 @main.route("/bookmarks")
@@ -782,6 +1008,29 @@ def notifications():
     return render_template("features/notifications.html", notifications=notes)
 
 
+
+# =========================
+# Public Profile
+# =========================
+
+@main.route('/user/<int:user_id>')
+@login_required
+def public_profile(user_id):
+    # If a user tries to view their own public profile, redirect them to their editable one
+    if user_id == current_user.user_id:
+        return redirect(url_for('main.profile'))
+
+    # Fetch the user whose profile is being viewed
+    user = User.query.get_or_404(user_id)
+
+    # Fetch only the 'Active' items posted by that user
+    items = Item.query.filter_by(user_id=user.user_id, status='Active')\
+                      .order_by(Item.created_at.desc()).all()
+
+    return render_template("public_profile.html", user=user, items=items)
+
+
+
 # =========================
 # Start CHAT
 # =========================
@@ -806,34 +1055,119 @@ def start_chat(item_id):
 # =========================
 # CHAT
 # =========================
+
+@main.route('/message/<int:message_id>/delete', methods=['POST'])
+@login_required
+def delete_message(message_id):
+    # 1. Find the message in the database
+    msg = ChatMessage.query.get_or_404(message_id)
+
+    # 2. Security Check: Ensure the current user is the sender of the message
+    if msg.sender_id != current_user.user_id:
+        abort(403) # Forbidden
+
+    # 3. "Soft delete" the message by marking it as deleted
+    msg.deleted_at = datetime.utcnow()
+    # Optional: You can also clear the content if you wish
+    # msg.message = None
+    # msg.image_url = None
+    
+    db.session.commit()
+
+    # 4. Return a success response to the JavaScript
+    return jsonify({'success': True})
+
+# ADD this new route to confirm a deal
+@main.route('/chat/<int:session_id>/confirm_deal', methods=['POST'])
+@login_required
+def confirm_deal(session_id):
+    session = ChatSession.query.get_or_404(session_id)
+    if session.user1_id != current_user.user_id and session.user2_id != current_user.user_id:
+        abort(403)
+
+    session.status = 'Confirmed'
+    session.item.status = 'Traded' # Update the item's status as well
+    db.session.add(ItemHistory(item_id=session.item_id, user_id=current_user.user_id, action=f"Deal confirmed with user {session.user1_id if session.user2_id == current_user.user_id else session.user2_id}"))
+    db.session.commit()
+    flash('Deal successfully confirmed! The item is now marked as "Traded".', 'success')
+    return redirect(url_for('main.chat', session_id=session_id))
+
+# ADD this new route to block a user in a chat
+@main.route('/chat/<int:session_id>/block', methods=['POST'])
+@login_required
+def block_chat(session_id):
+    session = ChatSession.query.get_or_404(session_id)
+    if session.user1_id != current_user.user_id and session.user2_id != current_user.user_id:
+        abort(403)
+
+    session.status = 'Blocked'
+    db.session.commit()
+    flash('This chat has been blocked. You can no longer send messages.', 'warning')
+    return redirect(url_for('main.chat', session_id=session_id))
+
+
+
+@main.route('/chat/<int:session_id>/unblock', methods=['POST'])
+@login_required
+def unblock_chat(session_id):
+    session = ChatSession.query.get_or_404(session_id)
+    # Security check: ensure the current user is part of the chat
+    if session.user1_id != current_user.user_id and session.user2_id != current_user.user_id:
+        abort(403)
+
+    # Change status back to Active
+    session.status = 'Active'
+    db.session.commit()
+    flash('Chat has been unblocked.', 'success')
+    return redirect(url_for('main.profile'))
+
+
+
+# REPLACE your entire old /chat/<session_id> route with this one
 @main.route("/chat/<int:session_id>", methods=["GET", "POST"])
 @login_required
 def chat(session_id):
     chat_session = ChatSession.query.get_or_404(session_id)
+    if chat_session.user1_id != current_user.user_id and chat_session.user2_id != current_user.user_id:
+        abort(403)
+
+    other_user = chat_session.user2 if chat_session.user1_id == current_user.user_id else chat_session.user1
+    deal = DealProposal.query.filter_by(chat_session_id=session_id).first()
+    
     form = ChatForm()
     if form.validate_on_submit():
-        sender_id = getattr(current_user, "user_id", None) or getattr(current_user, "org_id", None)
-        db.session.add(ChatMessage(
-            session_id=chat_session.session_id,
-            sender_id=sender_id,
-            message=form.message.data,
-            timestamp=datetime.utcnow()
-        ))
+        if chat_session.status != 'Active':
+            flash("Cannot send messages in this chat.", "danger")
+            return redirect(url_for("main.chat", session_id=session_id))
 
-        # notify other participant
-        other_id = chat_session.user_id if sender_id != chat_session.user_id else chat_session.org_id
-        db.session.add(Notification(
-            user_id=other_id,
-            message=f"New message in chat {chat_session.session_id}",
-            sent_at=datetime.utcnow()
-        ))
+        if not form.message.data and not form.image.data:
+            flash("Cannot send an empty message.", "warning")
+            return redirect(url_for("main.chat", session_id=session_id))
+
+        image_filename = None
+        if form.image.data:
+            image_file = form.image.data
+            image_filename = secure_filename(f"{datetime.utcnow().timestamp()}_{image_file.filename}")
+            image_file.save(os.path.join(CHAT_UPLOAD_FOLDER, image_filename))
+            image_filename = f"images/chat_uploads/{image_filename}"
+
+        # Audio handling logic is now removed
+        msg = ChatMessage(
+            session_id=chat_session.session_id,
+            sender_id=current_user.user_id,
+            message=form.message.data if form.message.data else None,
+            image_url=image_filename
+        )
+        db.session.add(msg)
         db.session.commit()
-        flash("Message sent.", "success")
         return redirect(url_for("main.chat", session_id=session_id))
 
     messages = ChatMessage.query.filter_by(session_id=session_id).order_by(ChatMessage.timestamp.asc()).all()
-    return render_template("features/chat.html", messages=messages, form=form, session=chat_session)
-
+    
+    return render_template(
+        "features/chat.html", 
+        messages=messages, form=form, session=chat_session, other_user=other_user, deal=deal
+    )
 
 # =========================
 # ITEM SEARCH / FILTER

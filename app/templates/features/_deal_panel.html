@@ -1,0 +1,175 @@
+<style>
+    /* ---------------------------------- */
+    /* --- Modern Deal Panel Styles --- */
+    /* ---------------------------------- */
+    :root {
+        --border-color: #dee2e6;
+        --border-color-dark: rgba(255, 255, 255, 0.15);
+        --subtle-bg: #f8f9fa;
+        --subtle-bg-dark: rgba(255, 255, 255, 0.03);
+        --success-color: #198754;
+        --danger-color: #dc3545;
+        --secondary-color: #6c757d;
+        --success-bg: rgba(25, 135, 84, 0.1);
+    }
+
+    .dark-mode {
+        --success-color: #20c997;
+        --danger-color: #fd7e14;
+        --secondary-color: #adb5bd;
+        --success-bg: rgba(32, 201, 151, 0.1);
+    }
+    
+    .deal-panel-modern {
+        background: var(--subtle-bg);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius, 0.75rem);
+        padding: 1rem;
+    }
+    .dark-mode .deal-panel-modern {
+        background: var(--subtle-bg-dark);
+        border-color: var(--border-color-dark);
+    }
+
+    /* Status Bar */
+    .deal-status-bar-modern {
+        position: relative;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 1.5rem 0 2rem 0;
+    }
+    .deal-status-line {
+        position: absolute;
+        top: 20px;
+        left: 30px;
+        right: 30px;
+        height: 2px;
+        background-color: var(--border-color);
+        z-index: 1;
+        overflow: hidden;
+    }
+    .deal-status-progress {
+        position: absolute;
+        top: 0;
+        height: 100%;
+        background-color: var(--success-color);
+        width: var(--progress, 0%);
+        transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+    }
+    .progress-owner { left: 0; }
+    .progress-proposer { right: 0; }
+    
+    .deal-status-node {
+        position: relative;
+        z-index: 2;
+        text-align: center;
+    }
+    .deal-user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+        margin-bottom: 0.5rem;
+        border: 2px solid var(--border-color);
+        background-color: var(--bs-body-bg);
+        padding: 2px;
+    }
+    .deal-user-name {
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+    .deal-status-icon {
+        font-size: 1rem;
+    }
+
+    /* Status-specific colors */
+    .deal-status-node.status-confirmed .deal-user-avatar { border-color: var(--success-color); }
+    .deal-status-node.status-confirmed .deal-status-icon { color: var(--success-color); }
+    .deal-status-node.status-rejected .deal-user-avatar { border-color: var(--danger-color); }
+    .deal-status-node.status-rejected .deal-status-icon { color: var(--danger-color); }
+    .deal-status-node.status-pending .deal-status-icon { color: var(--secondary-color); }
+
+    /* Alert Box */
+    .deal-finalized-alert-modern {
+        font-size: 0.9rem;
+        border-left-width: 4px;
+        background-color: var(--success-bg);
+        border-color: var(--success-color);
+        color: var(--bs-emphasis-color);
+    }
+    .dark-mode .deal-finalized-alert-modern {
+        color: var(--bs-light);
+    }
+</style>
+
+{% set owner = session.item.owner %}
+{% set proposer = session.user1 if session.item.owner.user_id == session.user2_id else session.user2 %}
+{% set owner_status = deal.owner_status if deal else 'pending' %}
+{% set proposer_status = deal.proposer_status if deal else 'pending' %}
+
+<div class="sidebar-card deal-panel-modern">
+    <h6>Deal Status</h6>
+    <div class="deal-status-bar-modern">
+        <div class="deal-status-line">
+            <!-- Owner half progress -->
+            <div class="deal-status-progress progress-owner"
+                 style="--progress: {{ '50%' if owner_status == 'confirmed' else '0%' }};">
+            </div>
+            <!-- Proposer half progress -->
+            <div class="deal-status-progress progress-proposer"
+                 style="--progress: {{ '50%' if proposer_status == 'confirmed' else '0%' }};">
+            </div>
+        </div>
+
+        <!-- Owner node -->
+        <div class="deal-status-node status-{{ owner_status }}">
+            <img src="{{ url_for('static', filename=owner.profile_picture or 'images/users_placeholder.png') }}" 
+                 class="deal-user-avatar">
+            <div class="deal-user-name">{{ owner.first_name }} (Owner)</div>
+            <div class="deal-status-icon">
+                {% if owner_status == 'confirmed' %}
+                    <i class="fas fa-check-circle" title="Confirmed"></i>
+                {% elif owner_status == 'rejected' %}
+                    <i class="fas fa-times-circle" title="Rejected"></i>
+                {% else %}
+                    <i class="fas fa-hourglass-half" title="Pending"></i>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Proposer node -->
+        <div class="deal-status-node status-{{ proposer_status }}">
+            <img src="{{ url_for('static', filename=proposer.profile_picture or 'images/users_placeholder.png') }}" 
+                 class="deal-user-avatar">
+            <div class="deal-user-name">{{ proposer.first_name }}</div>
+            <div class="deal-status-icon">
+                {% if proposer_status == 'confirmed' %}
+                    <i class="fas fa-check-circle" title="Confirmed"></i>
+                {% elif proposer_status == 'rejected' %}
+                    <i class="fas fa-times-circle" title="Rejected"></i>
+                {% else %}
+                    <i class="fas fa-hourglass-half" title="Pending"></i>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    {% if session.item.deal_finalized_at %}
+        <div class="alert deal-finalized-alert-modern">
+            <i class="fas fa-clock me-1"></i> Deal finalized! Item will be removed on 
+            {{ session.item.deal_finalized_at.strftime('%b %d, %Y') }}.
+        </div>
+    {% else %}
+        <form action="{{ url_for('main.propose_deal', session_id=session.session_id) }}" method="POST" class="w-100">
+            <div class="btn-group w-100" role="group">
+                <button type="submit" name="decision" value="confirmed" class="btn btn-outline-success">
+                    <i class="fas fa-check"></i> Confirm
+                </button>
+                <button type="submit" name="decision" value="rejected" class="btn btn-outline-danger">
+                    <i class="fas fa-times"></i> Reject
+                </button>
+            </div>
+        </form>
+    {% endif %}
+</div>
