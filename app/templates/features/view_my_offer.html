@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    .timeline {
+        list-style: none;
+        padding: 1rem 0;
+        margin: 0;
+        position: relative;
+    }
+    .timeline::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 12px;
+        height: 100%;
+        width: 4px;
+        background: var(--border);
+    }
+    .timeline-item {
+        margin-bottom: 2rem;
+        position: relative;
+        padding-left: 40px;
+    }
+    .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: 4px;
+        top: 4px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: var(--secondary);
+        border: 4px solid var(--border);
+        z-index: 1;
+    }
+    .timeline-item.completed::before {
+        background: var(--bs-success);
+        border-color: var(--bs-success-bg-subtle);
+    }
+    .timeline-item.active::before {
+        background: var(--primary);
+        border-color: var(--bs-primary-bg-subtle);
+    }
+    .timeline-item.failed::before {
+        background: var(--bs-danger);
+        border-color: var(--bs-danger-bg-subtle);
+    }
+    .timeline-item-title {
+        font-weight: 600;
+    }
+    .timeline-item-subtitle {
+        font-size: 0.875rem;
+        color: var(--muted-foreground);
+    }
+</style>
+
+<div class="container py-5">
+    <div class="row">
+        <div class="col-lg-8">
+            <h1 class="fw-bold">Donation Offer Details</h1>
+            <p class="text-muted">For need: <span class="fw-bold">{{ offer.need.title }}</span> to {{ offer.organization.name }}</p>
+            
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Offered Items</h5>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped mb-0">
+                        <thead>
+                            <tr>
+                                <th>Item Name</th>
+                                <th>Category</th>
+                                <th>Qty</th>
+                                <th>Condition</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in offer.offered_items %}
+                            <tr>
+                                <td>{{ item.title }}</td>
+                                <td>{{ item.category }}</td>
+                                <td>{{ item.quantity }}</td>
+                                <td>{{ item.condition }}</td>
+                                <td>
+                                    {% if item.status == 'Accepted' %}
+                                        <span class="badge bg-success">Accepted</span>
+                                    {% elif item.status == 'Rejected' %}
+                                        <span class="badge bg-danger">Rejected</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Pending</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {% if offer.status == 'Completed' and offer.proof_image_url %}
+            <div class="card mt-4">
+                <div class="card-header"><h5 class="mb-0">Donation Proof</h5></div>
+                <div class="card-body">
+                    <p>The organization has marked this donation as complete. Thank you for your contribution!</p>
+                    <img src="{{ url_for('static', filename=offer.proof_image_url) }}" class="img-fluid rounded border">
+                </div>
+            </div>
+            {% endif %}
+
+        </div>
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header"><h5 class="mb-0">Offer Status</h5></div>
+                <div class="card-body">
+                    {% set statuses = ['Pending Review', 'Awaiting Pickup', 'Donation Pending', 'Completed'] %}
+                    <ol class="timeline">
+                        {% for status in statuses %}
+                            {# --- MODIFIED LOGIC --- #}
+                            {# Treat 'Accepted' and 'Partially Accepted' as if they are 'Awaiting Pickup' for the timeline calculation #}
+                            {% set effective_offer_status = 'Awaiting Pickup' if offer.status in ['Accepted', 'Partially Accepted'] else offer.status %}
+
+                            {% set is_completed = (statuses.index(effective_offer_status) > statuses.index(status)) if effective_offer_status in statuses else False %}
+                            {% set is_active = effective_offer_status == status %}
+                            
+                            <li class="timeline-item {{ 'completed' if is_completed }} {{ 'active' if is_active }}">
+                                <div class="timeline-item-title">{{ status }}</div>
+                                <div class="timeline-item-subtitle">
+                                    {# ... your existing subtitle logic is fine ... #}
+                                </div>
+                            </li>
+                        {% endfor %}
+
+                        {% if offer.status == 'Pickup Failed' %}
+                        <li class="timeline-item failed">
+                            <div class="timeline-item-title">Pickup Failed</div>
+                            <div class="timeline-item-subtitle">The offer has been cancelled after a pickup retry.</div>
+                        </li>
+                        {% elif offer.status == 'Rejected' %}
+                        <li class="timeline-item failed">
+                            <div class="timeline-item-title">Offer Rejected</div>
+                        </li>
+                        {% endif %}
+                    </ol>
+                    
+                    {% if offer.status == 'Pending Review' %}
+                    <hr>
+                    <div class="d-flex gap-2">
+                        <a href="{{ url_for('main.edit_donation_offer', offer_id=offer.offer_id) }}" class="btn btn-outline-primary w-100">
+                            <i class="fas fa-edit"></i> Edit Offer
+                        </a>
+                        <form action="{{ url_for('main.delete_donation_offer', offer_id=offer.offer_id) }}" method="POST" onsubmit="return confirm('Are you sure you want to withdraw this offer?');" class="w-100">
+                            <button type="submit" class="btn btn-danger w-100">
+                                <i class="fas fa-trash-alt"></i> Withdraw
+                            </button>
+                        </form>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

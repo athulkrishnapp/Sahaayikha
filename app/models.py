@@ -75,7 +75,6 @@ class Organization(UserMixin, db.Model):
 
     # Relationships
     disaster_needs = db.relationship("DisasterNeed", backref="organization", lazy="dynamic")
-    disaster_donations = db.relationship("DisasterDonation", backref="organization", lazy="dynamic")
     verification_logs = db.relationship("OrganizationVerificationLog", backref="organization", lazy="dynamic")
 
     def set_password(self, raw_password):
@@ -118,7 +117,6 @@ class Item(db.Model):
     # Relationships
     histories = db.relationship("ItemHistory", backref="item", lazy="dynamic")
     chat_sessions = db.relationship("ChatSession", backref="item", lazy="dynamic")
-    disaster_donations = db.relationship("DisasterDonation", backref="item", lazy="dynamic")
     bookmarks = db.relationship("Bookmark", backref="item", lazy="dynamic")
     reports = db.relationship("Report", backref="item", lazy="dynamic")
     verification_logs = db.relationship("OrganizationVerificationLog", backref="item", lazy="dynamic")
@@ -202,7 +200,8 @@ class DisasterNeed(db.Model):
     __tablename__ = "disaster_needs"
     need_id = db.Column(db.Integer, primary_key=True)
     org_id = db.Column(db.Integer, db.ForeignKey("organizations.org_id"), nullable=False)
-    category = db.Column(db.String(255))
+    title = db.Column(db.String(255), nullable=True) # <-- ADD THIS
+    categories = db.Column(db.Text, nullable=True) # Will store comma-separated categories
     description = db.Column(db.Text, nullable=False)
     location = db.Column(db.String(255))
     posted_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -212,18 +211,39 @@ class DisasterNeed(db.Model):
 from datetime import datetime
 from app import db
 
-class DisasterDonation(db.Model):
-    __tablename__ = "disaster_donations"
-    donation_id = db.Column(db.Integer, primary_key=True)
-    item_id = db.Column(db.Integer, db.ForeignKey("items.item_id"), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
-    org_id = db.Column(db.Integer, db.ForeignKey("organizations.org_id"), nullable=True)
-    status = db.Column(db.String(50), default="Pending")  # Pending / Verified / Picked Up
-    expiry_date = db.Column(db.Date, nullable=True)
-    manufacture_date = db.Column(db.Date, nullable=True)
+class DonationOffer(db.Model):
+    __tablename__ = 'donation_offers'
+    offer_id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    need_id = db.Column(db.Integer, db.ForeignKey('disaster_needs.need_id'), nullable=False)
+    org_id = db.Column(db.Integer, db.ForeignKey('organizations.org_id'), nullable=False)
+    status = db.Column(db.String(50), default='Pending Review')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     verified_at = db.Column(db.DateTime, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)  # NEW column
+    picked_up_at = db.Column(db.DateTime, nullable=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    pickup_retries = db.Column(db.Integer, default=0) # To track the one-time retry
+    proof_image_url = db.Column(db.String(255), nullable=True) # For orgs to upload proof
+    
+    # Relationships
+    user = db.relationship('User', backref='donation_offers')
+    need = db.relationship('DisasterNeed', backref='donation_offers')
+    organization = db.relationship('Organization', backref='donation_offers')
+    offered_items = db.relationship('OfferedItem', backref='offer', lazy='dynamic', cascade="all, delete-orphan")
 
+class OfferedItem(db.Model):
+    __tablename__ = 'offered_items'
+    offered_item_id = db.Column(db.Integer, primary_key=True)
+    offer_id = db.Column(db.Integer, db.ForeignKey('donation_offers.offer_id'), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    category = db.Column(db.String(255), nullable=True) # <-- ADD THIS LINE
+    description = db.Column(db.Text, nullable=True)
+    quantity = db.Column(db.Integer, nullable=False, default=1)
+    condition = db.Column(db.String(50)) # New / Used
+    image_url = db.Column(db.String(255), nullable=True)
+    manufacture_date = db.Column(db.Date, nullable=True)
+    expiry_date = db.Column(db.Date, nullable=True)
+    status = db.Column(db.String(50), default='Pending')
 
 
 # ---------- FEEDBACK ----------
@@ -274,6 +294,10 @@ class Notification(db.Model):
     __tablename__ = "notifications"
     notification_id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
+    
+
+    item_id = db.Column(db.Integer, db.ForeignKey("items.item_id"), nullable=True)
+    
     message = db.Column(db.Text, nullable=False)
     sent_at = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(50), default="Unread")  # Read / Unread

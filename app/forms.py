@@ -1,13 +1,14 @@
 from flask_wtf import FlaskForm
 from wtforms import (
     StringField, PasswordField, SubmitField, TextAreaField,
-    SelectField, BooleanField, DateField, FileField, MultipleFileField
+    SelectField, BooleanField, DateField, FileField, MultipleFileField,
+    IntegerField, FormField, SelectMultipleField
 )
-from wtforms.validators import DataRequired, Email, EqualTo, Length, Optional
+from wtforms.validators import DataRequired, Email, EqualTo, Length, Optional, NumberRange
 from flask_wtf.file import FileAllowed
 
 
-from wtforms import StringField, SubmitField, FileField
+from wtforms import StringField, SubmitField, FileField,FieldList
 from wtforms.validators import DataRequired, Length, Optional
 from flask_wtf.file import FileAllowed
 # -------------------------
@@ -224,11 +225,12 @@ class ItemForm(FlaskForm):
     title = StringField('Title', validators=[DataRequired(), Length(max=255)])
     description = TextAreaField('Description', validators=[Optional()])
     category = SelectField('Category', choices=CATEGORIES, validators=[DataRequired()])
+    # --- MODIFICATION START ---
     type = SelectField('Type', choices=[
         ('Trade', 'Trade'),
-        ('Share', 'Share'),
-        ('Disaster', 'Disaster')
+        ('Share', 'Share')
     ], validators=[DataRequired()])
+    # --- MODIFICATION END ---
     condition = SelectField('Condition', choices=[
         ('New', 'New'),
         ('Used', 'Used'),
@@ -247,16 +249,31 @@ class ItemForm(FlaskForm):
 # -------------------------
 
 class DisasterNeedForm(FlaskForm):
-    category = SelectField('Category', choices=CATEGORIES, validators=[DataRequired()])
+    title = StringField('Need Title (e.g., "Kottayam Flood Relief")', validators=[DataRequired(), Length(max=255)]) # <-- ADD THIS
+    categories = SelectMultipleField('Categories (select multiple)', choices=CATEGORIES, validators=[DataRequired()])
     description = TextAreaField('Description', validators=[DataRequired()])
     location = SelectField('Location', choices=KERALA_LOCATIONS, validators=[DataRequired()])
     submit = SubmitField('Post Need')
 
 
-class DisasterDonationForm(FlaskForm):
-    expiry_date = DateField('Expiry Date (if applicable)', validators=[Optional()])
-    manufacture_date = DateField('Manufacture Date (if applicable)', validators=[Optional()])
-    submit = SubmitField('Donate')
+class OfferedItemForm(FlaskForm):
+    """Sub-form for a single item within a larger donation offer."""
+    class Meta:  # <-- ADD THIS META CLASS
+        csrf = False
+
+    title = StringField('Item Name', validators=[DataRequired(), Length(max=255)])
+    category = SelectField('Category', choices=CATEGORIES, validators=[DataRequired()])
+    description = TextAreaField('Description', validators=[Optional(), Length(max=1000)])
+    quantity = IntegerField('Quantity', validators=[DataRequired(), NumberRange(min=1)], default=1)
+    condition = SelectField('Condition', choices=[('New', 'New'), ('Used', 'Used')], validators=[DataRequired()])
+    image = FileField('Image', validators=[Optional(), FileAllowed(['jpg', 'png', 'jpeg'])])
+    manufacture_date = DateField('Manufacture Date', validators=[Optional()])
+    expiry_date = DateField('Expiry Date', validators=[Optional()])
+
+class DonationOfferForm(FlaskForm):
+    """Main form for a user to offer a list of items."""
+    offered_items = FieldList(FormField(OfferedItemForm), min_entries=1)
+    submit = SubmitField('Submit Donation Offer')
 
 # -------------------------
 # Interaction Forms

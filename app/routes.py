@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 from flask import (
     Blueprint, render_template, redirect, url_for,
@@ -10,23 +10,21 @@ from flask_login import (
     login_required
 )
 from werkzeug.utils import secure_filename
-
 from sqlalchemy import or_
 
 from app import db, login_manager
 from app.models import (
     User, Admin, Organization, LoginLog,
     Item, ItemImage, ItemHistory,
-    ChatSession, ChatMessage, DealProposal, # <-- Added here
-    DisasterNeed, DisasterDonation,
+    ChatSession, ChatMessage, DealProposal,
+    DisasterNeed, DonationOffer, OfferedItem,
     Feedback, Report, Bookmark,
     CategoryFollow, Notification
 )
 from app.forms import (
     RegistrationForm, OrganizationRegistrationForm, LoginForm,
     ItemForm, FeedbackForm, ReportForm,
-    CategoryFollowForm, DisasterNeedForm,
-    DisasterDonationForm, ChatForm
+    CategoryFollowForm, DisasterNeedForm, DonationOfferForm, ChatForm
 )
 
 main = Blueprint("main", __name__)
@@ -134,6 +132,79 @@ def run_scheduled_deletions():
     if items_to_delete:
         db.session.commit()
 
+# =========================
+# AI & NOTIFICATION HELPERS
+# =========================
+
+def get_keywords(text):
+    """
+    A simple NLP simulation to extract keywords from text, like spaCy would.
+    It removes common stop words and returns a set of meaningful words.
+    """
+    if not text:
+        return set()
+    stop_words = {
+        'a', 'an', 'the', 'in', 'on', 'of', 'for', 'to', 'with', 'is', 'it', 'and', 
+        'or', 'i', 'you', 'he', 'she', 'we', 'they', 'item', 'good', 'condition'
+    }
+    words = text.lower().replace(",", "").replace(".", "").split()
+    return {word for word in words if word not in stop_words and len(word) > 2}
+
+def send_smart_notifications(new_item):
+    """
+    Finds users who might be interested in the new item and sends them notifications.
+    """
+    users_to_notify = set()
+    
+    # 1. Notify users following the exact category
+    followers = CategoryFollow.query.filter_by(category=new_item.category).all()
+    for follow in followers:
+        if follow.user_id != new_item.user_id:
+            users_to_notify.add(follow.user_id)
+
+    # 2. AI Match: Notify users whose followed categories are mentioned in the title/description
+    item_keywords = get_keywords(new_item.title) | get_keywords(new_item.description)
+    if item_keywords:
+        all_followed_categories = [cat[0] for cat in db.session.query(CategoryFollow.category).distinct().all()]
+        for category_name in all_followed_categories:
+            if category_name.lower() in item_keywords:
+                keyword_followers = CategoryFollow.query.filter_by(category=category_name).all()
+                for follow in keyword_followers:
+                    if follow.user_id != new_item.user_id:
+                        users_to_notify.add(follow.user_id)
+
+    # 3. AI Match: Find users with items that are a potential trade match
+    if new_item.type == 'Trade' and new_item.expected_return:
+        # Find items where the CATEGORY matches what the NEW ITEM wants in return
+        potential_matches_A = Item.query.filter(
+            Item.category == new_item.expected_return,
+            Item.user_id != new_item.user_id,
+            Item.status == 'Active'
+        ).all()
+        for match_item in potential_matches_A:
+            users_to_notify.add(match_item.user_id)
+        
+        # Find items where the EXPECTED RETURN matches the NEW ITEM's category
+        potential_matches_B = Item.query.filter(
+            Item.expected_return == new_item.category,
+            Item.user_id != new_item.user_id,
+            Item.status == 'Active'
+        ).all()
+        for match_item in potential_matches_B:
+            users_to_notify.add(match_item.user_id)
+
+    # Create and save notifications, avoiding duplicates for the same item
+    for user_id in users_to_notify:
+        exists = Notification.query.filter_by(user_id=user_id, item_id=new_item.item_id).first()
+        if not exists:
+            notification = Notification(
+                user_id=user_id,
+                item_id=new_item.item_id,
+                message=f"New AI Match: Item '{new_item.title}' in {new_item.category} might interest you!"
+            )
+            db.session.add(notification)
+    
+    db.session.commit()
 
 # -------------------------
 # HOME
@@ -524,38 +595,62 @@ def org_login():
 # -------------------------
 # ORG DASHBOARD
 # -------------------------
-@main.route("/org/dashboard")
+# In app/routes.py
+
+@main.route("/org/dashboard", methods=['GET', 'POST'])
 @login_required
 @role_required("org")
 def org_dashboard():
     org = current_user._get_current_object()
-    filter_type = request.args.get("filter")
+    form = DisasterNeedForm()
 
-    # All active items EXCEPT this org’s own
-    all_items_query = Item.query.filter(
-        Item.status == "Active",
-        Item.user_id != org.org_id  # assuming org_id is used for DisasterNeed posting
-    )
-    if filter_type in ["Trade", "Disaster"]:
-        all_items_query = all_items_query.filter_by(type=filter_type)
-    all_items = all_items_query.order_by(Item.created_at.desc()).all()
+    if form.validate_on_submit():
+        new_need = DisasterNeed(
+            title=form.title.data,
+            categories=",".join(form.categories.data),
+            description=form.description.data,
+            location=form.location.data,
+            org_id=org.org_id
+        )
+        db.session.add(new_need)
+        db.session.commit()
+        flash("New disaster need has been posted successfully.", "success")
+        return redirect(url_for('main.org_dashboard', filter='needs'))
 
-    # My posted disaster needs
-    my_items_query = DisasterNeed.query.filter_by(org_id=org.org_id)
-    if filter_type:
-        my_items_query = my_items_query.filter_by(category=filter_type)
-    my_items = my_items_query.order_by(DisasterNeed.posted_at.desc()).all()
+    # --- NEW FILTERING LOGIC ---
+    current_filter = request.args.get('filter', 'needs') # Default to 'needs'
+    
+    # Initialize all data lists
+    all_items = []
+    my_items = []
+    offers = []
 
-    donations = DisasterDonation.query.filter_by(org_id=org.org_id).all()
+    if current_filter == 'needs':
+        my_items = DisasterNeed.query.filter_by(org_id=org.org_id).order_by(DisasterNeed.posted_at.desc()).all()
+    elif current_filter == 'share':
+        all_items = Item.query.filter(Item.status == "Active", Item.type == 'Share', Item.user_id != org.org_id).order_by(Item.created_at.desc()).all()
+    else: # Handle all offer-related filters
+        offer_query = DonationOffer.query.filter_by(org_id=org.org_id)
+        if current_filter == 'incoming':
+            offer_query = offer_query.filter(DonationOffer.status == 'Pending Review')
+        elif current_filter == 'pickup':
+            offer_query = offer_query.filter(DonationOffer.status == 'Awaiting Pickup')
+        elif current_filter == 'pending_donation':
+            offer_query = offer_query.filter(DonationOffer.status == 'Donation Pending')
+        elif current_filter == 'completed':
+            offer_query = offer_query.filter(DonationOffer.status == 'Completed')
+        
+        offers = offer_query.order_by(DonationOffer.created_at.desc()).all()
+
 
     return render_template(
         "dashboard/org_dashboard.html",
         org=org,
         all_items=all_items,
         my_items=my_items,
-        donations=donations
+        offers=offers,  # Pass the filtered offers
+        form=form
     )
-
 
 
 
@@ -563,6 +658,7 @@ def org_dashboard():
 # =========================
 # USER DASHBOARD
 # =========================
+
 @main.route("/dashboard")
 @login_required
 @role_required("user")
@@ -571,43 +667,50 @@ def dashboard():
     filter_type = request.args.get("filter")
 
     items = []
-    donations = []
     chat_sessions = []
+    my_offers = []
+    disaster_needs = []  # <<< ADD THIS: New list for disaster needs
 
-    if view == "mine":
-        query = Item.query.filter_by(user_id=current_user.user_id)
-        # ## FIX 1: Added 'Share' to this list ##
-        if filter_type in ["Trade", "Disaster", "Share"]:
-            query = query.filter_by(type=filter_type)
-        items = query.order_by(Item.created_at.desc()).all()
-        donations = DisasterDonation.query.filter_by(user_id=current_user.user_id).all()
+    # --- LOGIC FOR DISASTER FILTER ---
+    # If the filter is Disaster, we fetch needs, not items.
+    if filter_type == 'Disaster':
+        disaster_needs = DisasterNeed.query.order_by(DisasterNeed.posted_at.desc()).all()
+    
+    # --- LOGIC FOR OTHER VIEWS AND FILTERS ---
+    else:
+        if view == "mine":
+            query = Item.query.filter_by(user_id=current_user.user_id)
+            if filter_type in ["Trade", "Share"]:  # This part is now correct
+                query = query.filter_by(type=filter_type)
+            items = query.order_by(Item.created_at.desc()).all()
 
-    elif view == "bookmarks":
-        user_bookmarks = Bookmark.query.filter_by(user_id=current_user.user_id).order_by(Bookmark.saved_at.desc()).all()
-        items = [b.item for b in user_bookmarks]
+        elif view == "bookmarks":
+            user_bookmarks = Bookmark.query.filter_by(user_id=current_user.user_id).order_by(Bookmark.saved_at.desc()).all()
+            items = [b.item for b in user_bookmarks]
 
-    elif view == "chats":
-        chat_sessions = db.session.query(ChatSession).filter(
-            or_(ChatSession.user1_id == current_user.user_id, ChatSession.user2_id == current_user.user_id)
-        ).join(Item).order_by(ChatSession.started_at.desc()).all()
+        elif view == "chats":
+            chat_sessions = db.session.query(ChatSession).filter(
+                or_(ChatSession.user1_id == current_user.user_id, ChatSession.user2_id == current_user.user_id)
+            ).join(Item).order_by(ChatSession.started_at.desc()).all()
         
-    else:  # Default to "all"
-        view = "all"
-        query = Item.query.filter(Item.status == "Active", Item.user_id != current_user.user_id)
-        # ## FIX 2: Added 'Share' to this list ##
-        if filter_type in ["Trade", "Disaster", "Share"]:
-            query = query.filter_by(type=filter_type)
-        items = query.order_by(Item.created_at.desc()).all()
-        donations = DisasterDonation.query.filter_by(status="Pending").all()
+        elif view == "donations":
+            my_offers = DonationOffer.query.filter_by(user_id=current_user.user_id).order_by(DonationOffer.created_at.desc()).all()
+
+        else:  # Default to "all"
+            view = "all"
+            query = Item.query.filter(Item.status == "Active", Item.user_id != current_user.user_id)
+            if filter_type in ["Trade", "Share"]: # This part is now correct
+                query = query.filter_by(type=filter_type)
+            items = query.order_by(Item.created_at.desc()).all()
 
     return render_template(
         "dashboard/user_dashboard.html",
         items=items,
-        donations=donations,
         chat_sessions=chat_sessions,
+        my_offers=my_offers,
+        disaster_needs=disaster_needs,  # <<< ADD THIS: Pass needs to the template
         view=view
     )
-
 
 # =========================
 # ITEM ROUTES
@@ -617,6 +720,7 @@ def dashboard():
 def new_item():
     form = ItemForm()
     if form.validate_on_submit():
+        # ... (Your existing code to create and save the item)
         item = Item(
             title=form.title.data,
             description=form.description.data,
@@ -629,21 +733,20 @@ def new_item():
             status="Active",
             created_at=datetime.utcnow(),
             user_id=getattr(current_user, "user_id", None),
-            expires_at=None  # Optional field
+            expires_at=None
         )
         db.session.add(item)
         db.session.commit()
 
+        # ... (Your existing code for image handling and item history)
         if form.images.data:
             files = form.images.data if isinstance(form.images.data, list) else [form.images.data]
             for f in files:
                 if f and f.filename:
-                    filename = secure_filename(f.filename)  # ✅ define filename
+                    filename = secure_filename(f.filename)
                     f.save(os.path.join(ITEM_UPLOAD_FOLDER, filename))
                     db.session.add(ItemImage(item_id=item.item_id, image_url=f"images/items/{filename}"))
             db.session.commit()
-
-
         db.session.add(ItemHistory(
             item_id=item.item_id,
             user_id=getattr(current_user, "user_id", None),
@@ -652,9 +755,17 @@ def new_item():
         ))
         db.session.commit()
 
+        # --- TRIGGER THE SMART NOTIFICATION SYSTEM ---
+        try:
+            send_smart_notifications(item)
+        except Exception as e:
+            print(f"Error sending notifications: {e}") # Log error but don't crash the app
+        # --- END TRIGGER ---
+
         flash("Item posted successfully.", "success")
         return redirect(url_for("main.dashboard"))
     return render_template("items/post_item.html", form=form)
+
 
 
 @main.route("/item/<int:item_id>")
@@ -904,44 +1015,359 @@ def follow_category(category):
 # =========================
 # DISASTER NEEDS & DONATIONS
 # =========================
-@main.route("/disaster/needs", methods=["GET", "POST"])
-@login_required
-def disaster_needs():
-    form = DisasterNeedForm()
-    if form.validate_on_submit():
-        db.session.add(DisasterNeed(
-            category=form.category.data,
-            description=form.description.data,
-            location=form.location.data,
-            org_id=getattr(current_user, "org_id", None),
-            posted_at=datetime.utcnow()
-        ))
-        db.session.commit()
-        flash("Disaster need posted.", "success")
-        return redirect(url_for("main.disaster_needs"))
 
+# 1. PAGE FOR USERS TO SEE ALL DISASTER NEEDS
+@main.route("/disaster-relief")
+@login_required
+@role_required("user")
+def disaster_relief_feed():
+    """Shows all active disaster needs to users."""
     needs = DisasterNeed.query.order_by(DisasterNeed.posted_at.desc()).all()
-    return render_template("features/disaster_needs.html", form=form, needs=needs)
+    return render_template("features/disaster_relief_feed.html", needs=needs)
 
 
-@main.route("/disaster/donate/<int:need_id>", methods=["GET", "POST"])
+@main.route("/disaster-need/<int:need_id>/offer", methods=['GET', 'POST'])
 @login_required
-def disaster_donate(need_id):
-    form = DisasterDonationForm()
+@role_required("user")
+def make_donation_offer(need_id):
     need = DisasterNeed.query.get_or_404(need_id)
+    form = DonationOfferForm()
+
     if form.validate_on_submit():
-        db.session.add(DisasterDonation(
-            user_id=getattr(current_user, "user_id", None),
-            org_id=getattr(current_user, "org_id", None),
-            item_id=None,
-            expiry_date=form.expiry_date.data,
-            manufacture_date=form.manufacture_date.data,
-            status="Pending"
-        ))
+        # --- NEW CUSTOM VALIDATION LOGIC START ---
+        critical_categories = ['Medicines', 'Food & Snacks', 'Baby Products', 'Health & Wellness']
+        is_custom_valid = True
+        for i, item_data in enumerate(form.offered_items.data):
+            if item_data['category'] in critical_categories:
+                if not item_data['manufacture_date'] or not item_data['expiry_date']:
+                    flash(f"Error in Item #{i+1}: Manufacture and Expiry dates are required for the '{item_data['category']}' category.", 'danger')
+                    is_custom_valid = False
+        
+        if not is_custom_valid:
+            # If our custom validation fails, re-render the form to show the flashed errors
+            return render_template("features/make_offer.html", form=form, need=need)
+        # --- NEW CUSTOM VALIDATION LOGIC END ---
+
+        # If we reach here, both standard and custom validation passed.
+        new_offer = DonationOffer(
+            user_id=current_user.user_id,
+            need_id=need.need_id,
+            org_id=need.org_id
+        )
+        db.session.add(new_offer)
+        
+        for item_form in form.offered_items.data:
+            filename = None
+            if item_form['image']:
+                file = item_form['image']
+                filename = secure_filename(file.filename)
+                file.save(os.path.join(CHAT_UPLOAD_FOLDER, filename))
+                filename = f"images/chat_uploads/{filename}"
+
+            offered_item = OfferedItem(
+                offer=new_offer,
+                title=item_form['title'],
+                category=item_form['category'],
+                description=item_form['description'],
+                quantity=item_form['quantity'],
+                condition=item_form['condition'],
+                image_url=filename,
+                manufacture_date=item_form['manufacture_date'],
+                expiry_date=item_form['expiry_date']
+            )
+            db.session.add(offered_item)
+            
         db.session.commit()
-        flash("Donation submitted successfully.", "success")
-        return redirect(url_for("main.disaster_needs"))
-    return render_template("features/disaster_donation.html", need=need, form=form)
+        flash('Your donation offer has been sent to the organization for review!', 'success')
+        return redirect(url_for('main.dashboard', view='donations')) # Redirect to "My Donations"
+    
+    elif request.method == 'POST':
+        if form.offered_items.errors:
+            for i, item_errors in enumerate(form.offered_items.errors):
+                if item_errors:
+                    flash(f"Error in Item #{i+1}:", 'danger')
+                    for field, messages in item_errors.items():
+                        flash(f"- {field.replace('_', ' ').title()}: {', '.join(messages)}", 'danger')
+
+    return render_template("features/make_offer.html", form=form, need=need)
+
+@main.route("/offer/<int:offer_id>/edit", methods=['GET', 'POST'])
+@login_required
+@role_required("user")
+def edit_donation_offer(offer_id):
+    offer = DonationOffer.query.get_or_404(offer_id)
+    if offer.user_id != current_user.user_id:
+        abort(403)
+    if offer.status != 'Pending Review':
+        flash('This offer has already been reviewed and cannot be edited.', 'warning')
+        return redirect(url_for('main.dashboard', view='donations'))
+
+    # Instantiate the form differently for GET vs POST
+    if request.method == 'GET':
+        # On GET, pre-populate the form with data from the database
+        prepared_data = {'offered_items': [item.__dict__ for item in offer.offered_items]}
+        form = DonationOfferForm(data=prepared_data)
+    else:
+        # On POST, populate the form with the submitted data
+        form = DonationOfferForm()
+
+    if form.validate_on_submit():
+        critical_categories = ['Medicines', 'Food & Snacks', 'Baby Products', 'Health & Wellness']
+        is_custom_valid = True
+        for i, item_data in enumerate(form.offered_items.data):
+            if item_data['category'] in critical_categories:
+                if not item_data['manufacture_date'] or not item_data['expiry_date']:
+                    flash(f"Error in Item #{i+1}: Manufacture and Expiry dates are required for the '{item_data['category']}' category.", 'danger')
+                    is_custom_valid = False
+        
+        if not is_custom_valid:
+            # We pass the form object itself, which contains the user's invalid data
+            return render_template("features/edit_offer.html", form=form, offer=offer)
+
+        # Clear existing items
+        for item in offer.offered_items:
+            db.session.delete(item)
+        db.session.commit()
+        
+        # Add updated items
+        for item_form in form.offered_items.data:
+            filename = None
+            if item_form['image']:
+                file = item_form['image']
+                filename = secure_filename(file.filename)
+                file.save(os.path.join(CHAT_UPLOAD_FOLDER, filename))
+                filename = f"images/chat_uploads/{filename}"
+            
+            offered_item = OfferedItem(
+                offer=offer,
+                title=item_form['title'],
+                category=item_form['category'],
+                description=item_form['description'],
+                quantity=item_form['quantity'],
+                condition=item_form['condition'],
+                image_url=filename,
+                manufacture_date=item_form['manufacture_date'],
+                expiry_date=item_form['expiry_date']
+            )
+            db.session.add(offered_item)
+        
+        db.session.commit()
+        flash('Your donation offer has been updated!', 'success')
+        return redirect(url_for('main.dashboard', view='donations'))
+
+    elif request.method == 'POST' and form.errors:
+        flash('Please correct the errors below.', 'danger')
+
+    return render_template("features/edit_offer.html", form=form, offer=offer)
+
+
+@main.route("/offer/<int:offer_id>/delete", methods=['POST'])
+@login_required
+@role_required("user")
+def delete_donation_offer(offer_id):
+    offer = DonationOffer.query.get_or_404(offer_id)
+    # Security Check: a user can only delete their own offers
+    if offer.user_id != current_user.user_id:
+        abort(403)
+    
+    # Cascade delete will handle the deletion of associated OfferedItem records
+    db.session.delete(offer)
+    db.session.commit()
+    flash('Your donation offer has been withdrawn.', 'info')
+    return redirect(url_for('main.dashboard', view='donations'))
+
+# In app/routes.py
+
+@main.route("/my-offer/<int:offer_id>")
+@login_required
+@role_required("user")
+def view_my_offer(offer_id):
+    """Shows the detailed status and progress of a user's donation offer."""
+    offer = DonationOffer.query.get_or_404(offer_id)
+
+    # Security check: ensure the current user owns this offer
+    if offer.user_id != current_user.user_id:
+        abort(403)
+
+    return render_template("features/view_my_offer.html", offer=offer)
+
+# 3. PAGE FOR AN ORGANIZATION TO REVIEW A SPECIFIC OFFER
+# --- 1. UPDATE the review_donation_offer route ---
+@main.route("/org/offer/<int:offer_id>/review", methods=['GET', 'POST'])
+@login_required
+@role_required("org")
+def review_donation_offer(offer_id):
+    offer = DonationOffer.query.get_or_404(offer_id)
+    # Security check
+    if offer.org_id != current_user.org_id:
+        abort(403)
+
+    if request.method == 'POST':
+        has_rejections = False
+        has_acceptances = False
+        
+        # Loop through the items and update their status
+        for item in offer.offered_items:
+            decision = request.form.get(f'item_decision_{item.offered_item_id}')
+            if decision == 'accept':
+                item.status = 'Accepted'
+                has_acceptances = True
+            elif decision == 'reject':
+                item.status = 'Rejected'
+                has_rejections = True
+        
+        # Determine the overall status and create the notification message
+        if has_acceptances:
+            if has_rejections:
+                offer.status = 'Partially Accepted' # Set this first
+            else:
+                offer.status = 'Accepted' # Set this first
+            
+            # NOW, set the final status for the workflow
+            offer.status = 'Awaiting Pickup' 
+            notification_message = f"Your offer for '{offer.need.title}' has been accepted! Please prepare the items for pickup within the next 2 days."
+        
+        elif has_rejections:
+            offer.status = 'Rejected'
+            notification_message = f"Unfortunately, your offer for '{offer.need.title}' was rejected."
+
+        else:
+            flash('Please accept or reject at least one item.', 'warning')
+            return redirect(url_for('main.review_donation_offer', offer_id=offer_id))
+
+        offer.verified_at = datetime.utcnow()
+        
+        # Add the notification to the database
+        new_notification = Notification(user_id=offer.user_id, message=notification_message)
+        db.session.add(new_notification)
+
+        db.session.commit()
+        flash(f"The offer has been reviewed. The donor will be notified.", 'success')
+        return redirect(url_for('main.org_dashboard', filter='offers'))
+    
+    return render_template('features/review_offer.html', offer=offer)
+
+# --- 2. ADD New routes for pickup status ---
+@main.route('/org/offer/<int:offer_id>/pickup_status', methods=['POST'])
+@login_required
+@role_required('org')
+def update_pickup_status(offer_id):
+    offer = DonationOffer.query.get_or_404(offer_id)
+    if offer.org_id != current_user.org_id:
+        abort(403)
+
+    new_status = request.form.get('status') # Will be 'Pickup Completed' or 'Pickup Failed'
+
+    if new_status == 'Pickup Completed':
+        offer.status = 'Donation Pending' # The org now has the items, but hasn't donated them yet
+        offer.picked_up_at = datetime.utcnow()
+        # Notify User
+        notification_message = f"Pickup completed for your offer to '{offer.need.title}'. Thank you! We will update you again once the items are donated."
+        new_notification = Notification(user_id=offer.user_id, message=notification_message)
+        db.session.add(new_notification)
+        flash('Offer status updated to "Donation Pending".', 'info')
+
+    elif new_status == 'Pickup Failed':
+        if offer.pickup_retries < 1:
+            offer.status = 'Awaiting Pickup' # Stays in the same state for the retry
+            offer.pickup_retries += 1
+            # Notify User
+            notification_message = f"There was an issue with the pickup for your offer to '{offer.need.title}'. We will retry once more within the next 2 days."
+            new_notification = Notification(user_id=offer.user_id, message=notification_message)
+            db.session.add(new_notification)
+            flash('Pickup failed. A retry has been scheduled.', 'warning')
+        else:
+            offer.status = 'Pickup Failed' # Final failure state
+            # Notify User
+            notification_message = f"The pickup for your offer to '{offer.need.title}' failed after a retry. The offer has been cancelled."
+            new_notification = Notification(user_id=offer.user_id, message=notification_message)
+            db.session.add(new_notification)
+            flash('Pickup failed after retry. Offer cancelled.', 'danger')
+
+    db.session.commit()
+    return redirect(url_for('main.org_dashboard', filter='offers'))
+
+# --- 3. ADD routes for managing Disaster Needs ---
+@main.route('/org/need/<int:need_id>/edit', methods=['GET', 'POST'])
+@login_required
+@role_required('org')
+def edit_disaster_need(need_id):
+    need = DisasterNeed.query.get_or_404(need_id)
+    if need.org_id != current_user.org_id:
+        abort(403)
+    
+    # Pre-populate the form. Note: .split() is needed for the multi-select field
+    form = DisasterNeedForm(obj=need, categories=need.categories.split(','))
+
+    if form.validate_on_submit():
+        need.title = form.title.data
+        need.categories = ",".join(form.categories.data)
+        need.description = form.description.data
+        need.location = form.location.data
+        db.session.commit()
+        flash('Disaster need has been updated.', 'success')
+        return redirect(url_for('main.org_dashboard', filter='needs'))
+
+    return render_template('features/edit_need.html', form=form, need=need)
+
+
+@main.route('/org/need/<int:need_id>/delete', methods=['POST'])
+@login_required
+@role_required('org')
+def delete_disaster_need(need_id):
+    need = DisasterNeed.query.get_or_404(need_id)
+    if need.org_id != current_user.org_id:
+        abort(403)
+    
+    # Check if there are any offers associated with this need.
+    if len(need.donation_offers) > 0:
+        flash('Cannot delete a need that has active donation offers. Please resolve offers first.', 'danger')
+        return redirect(url_for('main.org_dashboard', filter='needs'))
+
+    db.session.delete(need)
+    db.session.commit()
+    flash('Disaster need has been deleted.', 'success')
+    return redirect(url_for('main.org_dashboard', filter='needs'))
+
+# 4. ACTION ROUTE FOR ORG TO MARK AN OFFER AS "PICKED UP"
+@main.route('/org/offer/<int:offer_id>/mark-picked-up', methods=['POST'])
+@login_required
+@role_required('org')
+def mark_offer_picked_up(offer_id):
+    offer = DonationOffer.query.get_or_404(offer_id)
+    if offer.org_id != current_user.org_id:
+        abort(403)
+    
+    offer.status = 'Picked Up'
+    offer.picked_up_at = datetime.utcnow()
+    db.session.commit()
+    # TODO: Notify user
+    flash('Offer status updated to "Picked Up".', 'info')
+    return redirect(url_for('main.org_dashboard'))
+
+
+# 5. ACTION ROUTE FOR ORG TO MARK AN OFFER AS "COMPLETED" (WITH PROOF)
+@main.route('/org/offer/<int:offer_id>/complete', methods=['POST'])
+@login_required
+@role_required('org')
+def complete_donation(offer_id):
+    offer = DonationOffer.query.get_or_404(offer_id)
+    if offer.org_id != current_user.org_id:
+        abort(403)
+
+    proof_image = request.files.get('proof_image')
+    if proof_image:
+        filename = secure_filename(f"proof_{offer_id}_{proof_image.filename}")
+        proof_image.save(os.path.join(CHAT_UPLOAD_FOLDER, filename))
+        offer.proof_image_url = f"images/chat_uploads/{filename}"
+
+    offer.status = 'Completed'
+    offer.completed_at = datetime.utcnow()
+    db.session.commit()
+    # TODO: Notify user
+    flash('Donation marked as completed!', 'success')
+    return redirect(url_for('main.org_dashboard'))
+
 
 
 # =========================
@@ -1004,9 +1430,22 @@ def report_item(item_id):
 @main.route("/notifications")
 @login_required
 def notifications():
-    notes = Notification.query.filter_by(user_id=getattr(current_user, "user_id", None)).order_by(Notification.sent_at.desc()).all()
-    return render_template("features/notifications.html", notifications=notes)
+    user_id = getattr(current_user, "user_id", None)
+    
+    # This also works for Organizations, as long as they have a 'user_id' like attribute or are handled
+    if not hasattr(current_user, 'user_id'): 
+        flash("Notifications are available for users and organizations.", "info")
+        return redirect(request.referrer or url_for('main.home'))
 
+    # Mark all of the user's unread notifications as read
+    unread_notifications = Notification.query.filter_by(user_id=current_user.user_id, status="Unread").all()
+    for note in unread_notifications:
+        note.status = "Read"
+    db.session.commit()
+    
+    # Fetch all notifications for display, with the newest first
+    all_notifications = Notification.query.filter_by(user_id=current_user.user_id).order_by(Notification.sent_at.desc()).all()
+    return render_template("features/notifications.html", notifications=all_notifications)
 
 
 # =========================

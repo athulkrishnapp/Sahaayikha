@@ -2,17 +2,19 @@
 {% block content %}
 <div class="container py-4">
   <h2 class="mb-4">Notifications</h2>
-  <ul class="list-group">
+  <div class="list-group">
     {% for n in notifications %}
-      <li class="list-group-item {% if n.status == 'Unread' %}bg-light fw-bold{% endif %}">
+      {# Make the entire list item a link if the notification is linked to an item #}
+      <a href="{{ url_for('main.view_item', item_id=n.item_id) if n.item_id else '#' }}" 
+         class="list-group-item list-group-item-action {% if n.status == 'Unread' and loop.index0 < 5 %}list-group-item-primary{% endif %}">
         <div class="d-flex justify-content-between align-items-center">
           <span>{{ n.message }}</span>
           <small class="text-muted">{{ n.sent_at.strftime('%Y-%m-%d %H:%M') }}</small>
         </div>
-      </li>
+      </a>
     {% else %}
-      <li class="list-group-item text-muted">No notifications.</li>
+      <div class="list-group-item text-center text-muted">You have no notifications.</div>
     {% endfor %}
-  </ul>
+  </div>
 </div>
 {% endblock %}

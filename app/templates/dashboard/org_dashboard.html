@@ -2,9 +2,7 @@
 {% block content %}
 
 <style>
-    /* ---------------------------------- */
-    /* --- Modern Dashboard Design System --- */
-    /* ---------------------------------- */
+    /* Using the user_dashboard styles for consistency */
     :root {
         --primary: hsl(260, 84%, 60%);
         --primary-foreground: hsl(0, 0%, 100%);
@@ -21,7 +19,6 @@
         --shadow-fab: 0 10px 20px -5px hsl(260 84% 60% / 0.4);
         --radius: 0.75rem;
     }
-
     .dark-mode {
         --primary: hsl(260, 84%, 70%);
         --secondary: hsl(240, 3.7%, 15.9%);
@@ -34,256 +31,338 @@
         --muted: hsl(240, 3.7%, 15.9%);
         --muted-foreground: hsl(240, 5%, 64.9%);
     }
-
-    /* Base Styles */
     .dashboard-container { max-width: 1400px; margin: 0 auto; padding: 0 1.5rem; }
-
-    /* Header */
-    .dashboard-header {
-        background: var(--background); backdrop-filter: blur(12px);
-        border-bottom: 1px solid var(--border); position: sticky;
-        top: 0; z-index: 40; margin-bottom: 2rem;
-    }
+    .dashboard-header { background: var(--background); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 40; margin-bottom: 2rem; }
     .header-content { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; padding: 1.5rem 0; }
     .header-content h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
     .header-content p { color: var(--muted-foreground); font-size: 0.875rem; }
-    .header-actions .btn-dashboard { margin-left: 0.5rem; }
-
-    /* Buttons & Badges */
-    .btn-dashboard {
-        display: inline-flex; align-items: center; justify-content: center;
-        gap: 0.5rem; padding: 0.5rem 1rem; border-radius: var(--radius);
-        font-size: 0.875rem; font-weight: 500; border: none; cursor: pointer;
-        transition: all 0.2s ease; text-decoration: none;
-    }
+    .btn-dashboard { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: var(--radius); font-size: 0.875rem; font-weight: 500; border: none; cursor: pointer; transition: all 0.2s ease; text-decoration: none; }
     .btn-primary-dashboard { background: var(--primary); color: var(--primary-foreground); }
-    .btn-primary-dashboard:hover { background: hsl(260, 84%, 55%); }
-    .dark-mode .btn-primary-dashboard:hover { background: hsl(260, 84%, 75%); }
     .btn-outline-dashboard { background: transparent; color: var(--foreground); border: 1px solid var(--border); }
-    .btn-outline-dashboard:hover { background: var(--secondary); }
-
-    .badge-dashboard {
-        padding: 0.25rem 0.6rem; background: var(--secondary);
-        color: var(--secondary-foreground); border-radius: 0.5rem;
-        font-size: 0.75rem; font-weight: 500;
-    }
-
-    /* Section & Grid Layout */
+    .badge-dashboard { padding: 0.25rem 0.6rem; background: var(--secondary); color: var(--secondary-foreground); border-radius: 0.5rem; font-size: 0.75rem; font-weight: 500; }
     .section { margin-bottom: 3rem; }
     .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
     .section h2 { font-size: 1.5rem; font-weight: 600; }
-    
-    .action-grid { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
-
-    .item-grid {
-        display: grid;
-        gap: 1.5rem;
-        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    }
-    @media (min-width: 1400px) {
-        .item-grid { grid-template-columns: repeat(5, 1fr); }
-    }
-
-    /* Action Cards */
-    .action-card {
-        background: var(--card); border-radius: 1rem; padding: 2rem; text-align: center;
-        transition: all 0.3s ease; text-decoration: none; color: var(--card-foreground);
-        border: 1px solid var(--border);
-    }
-    .action-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-card); }
-    .action-card-icon { font-size: 2rem; margin-bottom: 1rem; }
-    .action-card h3 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; }
-    .action-card-stat { font-size: 1rem; color: var(--muted-foreground); }
-    
-    .action-card-trade { border-color: hsl(220 84% 90%); }
-    .action-card-trade .action-card-icon { color: hsl(220 84% 55%); }
-    .dark-mode .action-card-trade { border-color: hsl(220 84% 25%); }
-
-    .action-card-donation { border-color: hsl(142 71% 90%); }
-    .action-card-donation .action-card-icon { color: hsl(142 71% 45%); }
-    .dark-mode .action-card-donation { border-color: hsl(142 71% 25%); }
-    
-    .action-card-disaster { border-color: hsl(25 95% 90%); }
-    .action-card-disaster .action-card-icon { color: hsl(25 95% 53%); }
-    .dark-mode .action-card-disaster { border-color: hsl(25 95% 25%); }
-
-    /* Item Cards */
-    .dashboard-item-card {
-        background: var(--card); border-radius: var(--radius);
-        border: 1px solid var(--border); overflow: hidden;
-        transition: all 0.3s ease; display: flex;
-        flex-direction: column; height: 100%;
-    }
+    .item-grid { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+    @media (min-width: 1400px) { .item-grid { grid-template-columns: repeat(5, 1fr); } }
+    .dashboard-item-card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; transition: all 0.3s ease; display: flex; flex-direction: column; height: 100%; }
     .dashboard-item-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-card); }
     .item-image { aspect-ratio: 16 / 9; background: var(--muted); }
     .item-image img { width: 100%; height: 100%; object-fit: cover; }
     .item-content { padding: 1rem; flex-grow: 1; display: flex; flex-direction: column; }
     .item-title { font-size: 1.125rem; font-weight: 600; margin-bottom: 0.5rem; }
     .item-badges { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
-    .item-description { color: var(--muted-foreground); font-size: 0.875rem; flex-grow: 1; margin-bottom: 1rem; }
     .item-actions { display: flex; gap: 0.5rem; align-items: center; margin-top: auto; }
     .item-actions .btn-primary-dashboard { justify-content: space-between; flex-grow: 1; }
-
-    /* Floating Action Button */
-    @keyframes pulse {
-        0% { box-shadow: 0 0 0 0 hsla(var(--primary), 0.5); }
-        70% { box-shadow: 0 0 0 15px hsla(var(--primary), 0); }
-        100% { box-shadow: 0 0 0 0 hsla(var(--primary), 0); }
-    }
-    .fab-container { position: fixed; bottom: 2rem; right: 2rem; z-index: 50; }
-    .fab-options { list-style: none; padding: 0; margin: 0 0 1rem 0; display: flex; flex-direction: column; align-items: flex-end; gap: 1rem; }
-    .fab-option { display: flex; align-items: center; opacity: 0; transform: translateY(10px); transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-    .fab-container.active .fab-option { opacity: 1; transform: translateY(0); }
-    .fab-container.active .fab-option:nth-child(1) { transition-delay: 0.1s; }
-    .fab-option .label {
-        background: var(--card); color: var(--card-foreground); padding: 5px 12px;
-        border-radius: var(--radius); margin-right: 1rem; font-size: 0.9rem;
-        font-weight: 500; box-shadow: var(--shadow-card);
-    }
-    .fab-option .icon-wrapper {
-        width: 3rem; height: 3rem; display: flex; align-items: center; justify-content: center;
-        border-radius: 50%; color: var(--primary-foreground); box-shadow: var(--shadow-card);
-        background: var(--card); color: var(--card-foreground);
-    }
-    .fab-button {
-        width: 3.75rem; height: 3.75rem; border-radius: 50%; border: none;
-        background: var(--primary); color: white;
-        cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        display: flex; align-items: center; justify-content: center;
-        box-shadow: var(--shadow-fab);
-        animation: pulse 2.5s infinite;
-    }
-    .fab-button:hover { transform: scale(1.1); animation-play-state: paused; }
-    .fab-button-icon { font-size: 1.5rem; transition: transform 0.3s ease; }
-    .fab-container.active .fab-button-icon { transform: rotate(45deg); }
-
-    /* Empty State */
+    .needs-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1rem; }
+    .needs-list-item { display: flex; align-items: center; padding: 1rem; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); transition: all 0.2s ease; text-decoration: none; color: inherit; }
+    .needs-list-item:hover { border-color: var(--primary); box-shadow: var(--shadow-card); transform: translateY(-3px); }
+    .needs-icon { font-size: 1.5rem; margin-right: 1rem; color: var(--primary); }
+    .item-content-main { flex-grow: 1; }
+    .item-title-main { font-weight: 600; margin-bottom: 0.25rem; }
+    .item-user { font-size: 0.875rem; color: var(--muted-foreground); }
     .empty-state { text-align: center; padding: 3rem 0; background: var(--card); border: 1px dashed var(--border); border-radius: var(--radius); }
     .empty-state i { font-size: 3rem; color: var(--muted-foreground); margin-bottom: 1rem; }
     .empty-state h3 { font-size: 1.25rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .quick-filters { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+    .filter-btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: 50px; font-size: 0.875rem; font-weight: 500; text-decoration: none; border: 1px solid var(--border); color: var(--muted-foreground); background-color: var(--card); transition: all 0.2s ease; }
+    .filter-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .filter-btn.active { background-color: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+    .filter-btn .fas { font-size: 0.8rem; }
+
+    /* FAB Button Styles */
+    .fab-container { position: fixed; bottom: 2rem; right: 2rem; z-index: 50; }
+    .fab-button { width: 3.75rem; height: 3.75rem; border-radius: 50%; border: none; background: var(--primary); color: white; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-fab); text-decoration: none; }
+    .fab-button:hover { transform: scale(1.1); color: white; }
+    .fab-button-icon { font-size: 1.5rem; transition: transform 0.3s ease; }
+    .fab-menu { position: absolute; bottom: calc(100% + 1rem); right: 0; list-style: none; padding: 0.5rem; margin: 0; background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow-card); width: 200px; transform: scale(0.95) translateY(10px); opacity: 0; pointer-events: none; transition: all 0.2s ease; }
+    .fab-menu.active { transform: scale(1) translateY(0); opacity: 1; pointer-events: auto; }
+    .fab-menu-item a { display: flex; align-items: center; gap: 1rem; padding: 0.75rem; text-decoration: none; color: var(--card-foreground); border-radius: 0.5rem; font-weight: 500; }
+    .fab-menu-item a:hover { background: var(--secondary); }
+    .ts-control {
+        padding: 0.375rem 0.75rem !important;
+        border-radius: var(--radius) !important;
+        border: 1px solid var(--border) !important;
+    }
+    .ts-dropdown {
+        border-color: var(--border) !important;
+        background-color: var(--card) !important;
+    }
+    .need-card .item-content {
+    padding: 1.25rem;
+    }
+
+    .need-card {
+        border-top: 4px solid var(--primary);
+        background-color: var(--card);
+    }
+
+    .need-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 0.75rem;
+    }
+
+    .need-card-icon {
+        font-size: 1.5rem;
+        color: var(--primary);
+        margin-left: 1rem;
+    }
+
+    .need-card .item-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+
+    .need-card .item-badges {
+        margin-bottom: 1rem;
+    }
+
+    .need-card .item-actions {
+        border-top: 1px solid var(--border);
+        padding-top: 1rem;
+        margin-top: auto; /* Pushes the location to the bottom */
+    }
+
+
+    .fab-container { position: fixed; bottom: 2rem; right: 2rem; z-index: 50; }
+    .fab-button { width: 3.75rem; height: 3.75rem; border-radius: 50%; border: none; background: var(--primary); color: white; cursor: pointer; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-fab); text-decoration: none; }
+    .fab-button:hover { transform: scale(1.1); color: white; }
+    .fab-button-icon { font-size: 1.5rem; transition: transform 0.3s ease; }
+    .fab-menu { position: absolute; bottom: calc(100% + 1rem); right: 0; list-style: none; padding: 0.5rem; margin: 0; background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow-card); width: 220px; transform: scale(0.95) translateY(10px); opacity: 0; pointer-events: none; transition: all 0.2s ease; }
+    .fab-menu.active { transform: scale(1) translateY(0); opacity: 1; pointer-events: auto; }
+    .fab-menu-item a { display: flex; align-items: center; gap: 1rem; padding: 0.75rem; text-decoration: none; color: var(--card-foreground); border-radius: 0.5rem; font-weight: 500; }
+    .fab-menu-item a:hover { background: var(--secondary); }
 </style>
 
 <header class="dashboard-header">
     <div class="dashboard-container">
         <div class="header-content">
             <div>
-                <h1>{{ org.name }} Dashboard</h1>
-                <p>Manage your posted needs and view available items.</p>
+                <h1>{{ current_user.name }}</h1>
+                <p>Manage your organization's activities and contributions.</p>
             </div>
             <div class="header-actions">
-                <a href="{{ url_for('main.org_dashboard', view='all') }}" class="btn-dashboard {{ 'btn-primary-dashboard' if request.args.get('view', 'all') == 'all' else 'btn-outline-dashboard' }}">All Items</a>
-                <a href="{{ url_for('main.org_dashboard', view='mine') }}" class="btn-dashboard {{ 'btn-primary-dashboard' if request.args.get('view') == 'mine' else 'btn-outline-dashboard' }}">Our Posted Needs</a>
-                <a href="{{ url_for('main.profile') }}" class="btn-dashboard btn-outline-dashboard" title="Organization Profile"><i class="fas fa-user"></i></a>
+                <a href="{{ url_for('main.profile') }}" class="btn-dashboard btn-outline-dashboard" title="My Profile"><i class="fas fa-user"></i></a>
             </div>
         </div>
     </div>
 </header>
 
 <main class="dashboard-container">
-    {% if request.args.get('view', 'all') == 'mine' %}
-        <section class="section">
-            <div class="section-header">
-                <h2>Our Posted Needs</h2>
-                <span class="badge-dashboard">{{ my_items|length }} total</span>
-            </div>
-            {% if my_items %}
-                <div class="item-grid">
-                    {% for item in my_items %}
-                    <div class="dashboard-item-card">
-                        <div class="item-content">
-                            <h3 class="item-title">{{ item.category }} Need</h3>
-                            <div class="item-badges">
-                                <span class="badge-dashboard">{{ item.location }}</span>
-                            </div>
-                            <p class="item-description">{{ item.description }}</p>
-                            </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            {% else %}
-                <div class="empty-state">
-                    <i class="fas fa-bullhorn"></i>
-                    <h3>No needs posted yet</h3>
-                    <p>Post a new disaster need using the '+' button below.</p>
-                </div>
-            {% endif %}
-        </section>
-    {% else %}
-        <section class="section">
-            <div class="section-header">
-                <h2>All Items on Platform</h2>
-                <span class="badge-dashboard">{{ all_items|length }} total</span>
-            </div>
-            {% if all_items %}
-                <div class="item-grid">
-                    {% for item in all_items %}
-                    <div class="dashboard-item-card">
-                        <a href="{{ url_for('main.view_item', item_id=item.item_id) }}">
-                            <div class="item-image">
-                                <img src="{% if item.images.first() %}{{ url_for('static', filename=item.images.first().image_url) }}{% else %}{{ url_for('static', filename='images/item_placeholder.jpg') }}{% endif %}" alt="{{ item.title }}">
-                            </div>
-                        </a>
-                        <div class="item-content">
-                            <h3 class="item-title">{{ item.title }}</h3>
-                            <div class="item-badges">
-                                <span class="badge-dashboard">{{ item.category }}</span>
-                                <span class="badge-dashboard">{{ item.condition }}</span>
-                                <span class="badge-dashboard">{{ item.type }}</span>
-                            </div>
-                             <div class="item-actions">
-                                <a href="{{ url_for('main.view_item', item_id=item.item_id) }}" class="btn-dashboard btn-primary-dashboard">
-                                    <span>View Details</span>
-                                    <i class="fas fa-arrow-right"></i>
-                                </a>
-                                <form action="{{ url_for('main.add_bookmark', item_id=item.item_id) }}" method="POST">
-                                    <button type="submit" class="btn-dashboard btn-outline-dashboard" title="Bookmark Item">
-                                        <i class="far fa-bookmark"></i>
-                                    </button>
+
+    <section class="section">
+        {% set current_filter = request.args.get('filter', 'needs') %}
+        <div class="quick-filters">
+            <a href="{{ url_for('main.org_dashboard', filter='needs') }}" class="filter-btn {{ 'active' if current_filter == 'needs' }}"><i class="fas fa-bullhorn"></i> Our Needs</a>
+            <a href="{{ url_for('main.org_dashboard', filter='incoming') }}" class="filter-btn {{ 'active' if current_filter == 'incoming' }}"><i class="fas fa-inbox"></i> Incoming Offers</a>
+            <a href="{{ url_for('main.org_dashboard', filter='pickup') }}" class="filter-btn {{ 'active' if current_filter == 'pickup' }}"><i class="fas fa-truck-loading"></i> To Be Picked Up</a>
+            <a href="{{ url_for('main.org_dashboard', filter='pending_donation') }}" class="filter-btn {{ 'active' if current_filter == 'pending_donation' }}"><i class="fas fa-hourglass-half"></i> Donation Pending</a>
+            <a href="{{ url_for('main.org_dashboard', filter='completed') }}" class="filter-btn {{ 'active' if current_filter == 'completed' }}"><i class="fas fa-check-circle"></i> Completed</a>
+            <a href="{{ url_for('main.org_dashboard', filter='share') }}" class="filter-btn {{ 'active' if current_filter == 'share' }}"><i class="fas fa-gift"></i> Shared Items</a>
+        </div>
+    </section>
+
+    {% set view = request.args.get('filter', 'needs') %}
+
+    {# --- INCOMING/ACCEPTED/PENDING/COMPLETED OFFERS VIEW --- #}
+    {% if view in ['incoming', 'pickup', 'pending_donation', 'completed'] %}
+    <section class="section">
+        <div class="section-header">
+            <h2>{{ view.replace('_', ' ')|title }} Offers</h2>
+            <span class="badge-dashboard">{{ offers|length }} total</span>
+        </div>
+        {% if offers %}
+            <ul class="needs-list">
+                {% for offer in offers %}
+                <div class="needs-list-item">
+                    <div class="item-content-main">
+                        <div class="item-title-main">Offer for: {{ offer.need.title }} (from {{ offer.user.first_name }})</div>
+                        <div class="item-user">Status: <span class="fw-bold">{{ offer.status }}</span></div>
+                        
+                        {% if offer.status == 'Awaiting Pickup' %}
+                            <div class="mt-3 d-flex gap-2">
+                                <form action="{{ url_for('main.update_pickup_status', offer_id=offer.offer_id) }}" method="POST">
+                                    <input type="hidden" name="status" value="Pickup Completed">
+                                    <button type="submit" class="btn btn-sm btn-success">Mark as Picked Up</button>
+                                </form>
+                                <form action="{{ url_for('main.update_pickup_status', offer_id=offer.offer_id) }}" method="POST">
+                                    <input type="hidden" name="status" value="Pickup Failed">
+                                    <button type="submit" class="btn btn-sm btn-warning">Mark as Pickup Failed</button>
                                 </form>
                             </div>
+                        {% elif offer.status == 'Donation Pending' %}
+                             <form action="{{ url_for('main.complete_donation', offer_id=offer.offer_id) }}" method="POST" enctype="multipart/form-data">
+                                <div class="input-group mt-3">
+                                    <input type="file" name="proof_image" class="form-control form-control-sm" required>
+                                    <button type="submit" class="btn btn-sm btn-info">Complete & Upload Proof</button>
+                                </div>
+                            </form>
+                        {% endif %}
+                    </div>
+                    <a href="{{ url_for('main.review_donation_offer', offer_id=offer.offer_id) }}" class="btn btn-sm btn-outline-primary ms-auto">View Details</a>
+                </div>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <div class="empty-state"><i class="fas fa-box-open"></i><h3>No offers in this category.</h3></div>
+        {% endif %}
+    </section>
+
+    {# --- OUR POSTED NEEDS VIEW --- #}
+    {% elif view == 'needs' %}
+    <section class="section">
+        <div class="section-header">
+            <h2>Our Posted Needs</h2>
+            <span class="badge-dashboard">{{ my_items|length }} total</span>
+        </div>
+        {% if my_items %}
+            <div class="item-grid">
+                {% for need in my_items %}
+                <div class="dashboard-item-card need-card">
+                    <div class="item-content">
+                        <div class="need-card-header">
+                            <div>
+                                <h3 class="item-title">{{ need.title }}</h3>
+                                <div class="item-badges">
+                                    {% if need.categories %}
+                                        {% for cat in need.categories.split(',') %}
+                                            <span class="badge-dashboard">{{ cat }}</span>
+                                        {% endfor %}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <i class="fas fa-bullhorn need-card-icon"></i>
+                        </div>
+                        <p class="text-muted small my-2">{{ need.description|truncate(120) }}</p>
+                        <div class="item-actions">
+                             <a href="{{ url_for('main.edit_disaster_need', need_id=need.need_id) }}" class="btn btn-sm btn-outline-secondary">Edit</a>
+                            <form action="{{ url_for('main.delete_disaster_need', need_id=need.need_id) }}" method="POST" onsubmit="return confirm('Are you sure? This cannot be undone.');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                            </form>
                         </div>
                     </div>
-                    {% endfor %}
                 </div>
-            {% else %}
-                <div class="empty-state">
-                    <i class="fas fa-search"></i>
-                    <h3>No items available</h3>
-                    <p>There are no items on the platform right now.</p>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state"><i class="fas fa-bullhorn"></i><h3>No needs posted yet</h3><p>Click the '+' button to post a new disaster need.</p></div>
+        {% endif %}
+    </section>
+
+    {# --- SHARED ITEMS VIEW --- #}
+    {% elif view == 'share' %}
+    <section class="section">
+        <div class="section-header">
+            <h2>Available 'Share' Items from Users</h2>
+            <span class="badge-dashboard">{{ all_items|length }} total</span>
+        </div>
+        {% if all_items %}
+            <div class="item-grid">
+                {% for item in all_items %}
+                <div class="dashboard-item-card">
+                    <a href="{{ url_for('main.view_item', item_id=item.item_id) }}" class="text-decoration-none">
+                        <div class="item-image"><img src="{% if item.images.first() %}{{ url_for('static', filename=item.images.first().image_url) }}{% else %}{{ url_for('static', filename='images/item_placeholder.jpg') }}{% endif %}" alt="{{ item.title }}"></div>
+                    </a>
+                    <div class="item-content">
+                        <h3 class="item-title">{{ item.title }}</h3>
+                        <div class="item-badges"><span class="badge-dashboard">{{ item.category }}</span><span class="badge-dashboard">{{ item.condition }}</span></div>
+                        <div class="item-actions">
+                            <a href="{{ url_for('main.view_item', item_id=item.item_id) }}" class="btn-dashboard btn-primary-dashboard"><span>View Details</span><i class="fas fa-arrow-right"></i></a>
+                        </div>
+                    </div>
                 </div>
-            {% endif %}
-        </section>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state"><i class="fas fa-box-open"></i><h3>No 'Share' items found</h3><p>There are no items available from users to share right now.</p></div>
+        {% endif %}
+    </section>
     {% endif %}
 </main>
 
-<div class="fab-container" id="fabContainer">
-    <ul class="fab-options">
-        <li class="fab-option">
-            <span class="label">Post Disaster Need</span>
-            <a href="{{ url_for('main.disaster_needs') }}" class="icon-wrapper" style="background: hsl(38, 92%, 52%); color: white;">
-                <i class="fas fa-bullhorn"></i>
+<div class="fab-container">
+    <ul class="fab-menu" id="fab-menu">
+        <li class="fab-menu-item">
+            <a href="#" data-bs-toggle="modal" data-bs-target="#postNeedModal">
+                <i class="fas fa-bullhorn fa-fw"></i>
+                <span>Post a Need</span>
+            </a>
+        </li>
+        <li class="fab-menu-item">
+            <a href="{{ url_for('main.new_item', type='Share') }}">
+                <i class="fas fa-gift fa-fw"></i>
+                <span>Post a Share Item</span>
             </a>
         </li>
     </ul>
-    <button class="fab-button" id="fabButton">
+    <button class="fab-button" id="fab-button" title="Quick Actions">
         <i class="fas fa-plus fab-button-icon"></i>
     </button>
 </div>
 
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    const fabContainer = document.getElementById('fabContainer');
-    const fabButton = document.getElementById('fabButton');
+<div class="modal fade" id="postNeedModal" tabindex="-1" aria-labelledby="postNeedModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="postNeedModalLabel">Post a New Disaster Need</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form method="POST" action="{{ url_for('main.org_dashboard') }}" novalidate>
+                    {{ form.hidden_tag() }}
+                    <div class="mb-3">
+                        {{ form.title.label(class="form-label") }}
+                        {{ form.title(class="form-control") }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.categories.label(class="form-label") }}
+                        {{ form.categories(class="form-select", id="categories") }} 
+                    </div>
+                    <div class="mb-3">
+                        {{ form.description.label(class="form-label") }}
+                        {{ form.description(class="form-control", rows="3") }}
+                    </div>
+                    <div class="mb-3">
+                        {{ form.location.label(class="form-label") }}
+                        {{ form.location(class="form-select") }}
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">Submit Need</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
 
-    fabButton.addEventListener('click', (e) => {
-        e.stopPropagation();
-        fabContainer.classList.toggle('active');
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // --- SCRIPT FOR FAB BUTTON ---
+    const fabButton = document.getElementById('fab-button');
+    const fabMenu = document.getElementById('fab-menu');
+    const fabIcon = fabButton.querySelector('.fab-button-icon');
+
+    fabButton.addEventListener('click', function () {
+        fabMenu.classList.toggle('active');
+        fabIcon.style.transform = fabMenu.classList.contains('active') ? 'rotate(45deg)' : 'rotate(0)';
     });
 
-    document.addEventListener('click', (e) => {
-        if (!fabContainer.contains(e.target) && fabContainer.classList.contains('active')) {
-            fabContainer.classList.remove('active');
+    document.addEventListener('click', function (event) {
+        if (!fabButton.contains(event.target) && !fabMenu.contains(event.target)) {
+            fabMenu.classList.remove('active');
+            fabIcon.style.transform = 'rotate(0)';
         }
+    });
+
+    // --- NEW SCRIPT TO INITIALIZE TOM SELECT ---
+    // WTForms generates the ID 'categories' for the form field named 'categories'
+    new TomSelect('#categories', {
+        plugins: ['remove_button'],
+        create: false,
+        placeholder: 'Select one or more categories...'
     });
 });
 </script>
