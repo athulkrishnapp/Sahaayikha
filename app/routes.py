@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import (
     Blueprint, render_template, redirect, url_for,
-    flash, request, abort
+    flash, request, abort, jsonify
 )
 from flask_login import (
     login_user, logout_user, current_user,
@@ -29,19 +29,13 @@ from app.forms import (
 
 main = Blueprint("main", __name__)
 
-from datetime import datetime
-from flask import jsonify, abort
-
-from datetime import datetime, timedelta
-
-from flask import jsonify
 # -------------------------
 # UPLOAD FOLDERS
 # -------------------------
 USER_UPLOAD_FOLDER = os.path.join("app", "static", "images", "profiles", "users")
 ORG_UPLOAD_FOLDER = os.path.join("app", "static", "images", "profiles", "orgs")
 ITEM_UPLOAD_FOLDER = os.path.join("app", "static", "images", "items")
-CHAT_UPLOAD_FOLDER = os.path.join("app", "static", "images", "chat_uploads") 
+CHAT_UPLOAD_FOLDER = os.path.join("app", "static", "images", "chat_uploads")
 os.makedirs(USER_UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(ORG_UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(ITEM_UPLOAD_FOLDER, exist_ok=True)
@@ -144,7 +138,7 @@ def get_keywords(text):
     if not text:
         return set()
     stop_words = {
-        'a', 'an', 'the', 'in', 'on', 'of', 'for', 'to', 'with', 'is', 'it', 'and', 
+        'a', 'an', 'the', 'in', 'on', 'of', 'for', 'to', 'with', 'is', 'it', 'and',
         'or', 'i', 'you', 'he', 'she', 'we', 'they', 'item', 'good', 'condition'
     }
     words = text.lower().replace(",", "").replace(".", "").split()
@@ -1329,22 +1323,6 @@ def delete_disaster_need(need_id):
     flash('Disaster need has been deleted.', 'success')
     return redirect(url_for('main.org_dashboard', filter='needs'))
 
-# 4. ACTION ROUTE FOR ORG TO MARK AN OFFER AS "PICKED UP"
-@main.route('/org/offer/<int:offer_id>/mark-picked-up', methods=['POST'])
-@login_required
-@role_required('org')
-def mark_offer_picked_up(offer_id):
-    offer = DonationOffer.query.get_or_404(offer_id)
-    if offer.org_id != current_user.org_id:
-        abort(403)
-    
-    offer.status = 'Picked Up'
-    offer.picked_up_at = datetime.utcnow()
-    db.session.commit()
-    # TODO: Notify user
-    flash('Offer status updated to "Picked Up".', 'info')
-    return redirect(url_for('main.org_dashboard'))
-
 
 # 5. ACTION ROUTE FOR ORG TO MARK AN OFFER AS "COMPLETED" (WITH PROOF)
 @main.route('/org/offer/<int:offer_id>/complete', methods=['POST'])
@@ -1516,22 +1494,6 @@ def delete_message(message_id):
     # 4. Return a success response to the JavaScript
     return jsonify({'success': True})
 
-# ADD this new route to confirm a deal
-@main.route('/chat/<int:session_id>/confirm_deal', methods=['POST'])
-@login_required
-def confirm_deal(session_id):
-    session = ChatSession.query.get_or_404(session_id)
-    if session.user1_id != current_user.user_id and session.user2_id != current_user.user_id:
-        abort(403)
-
-    session.status = 'Confirmed'
-    session.item.status = 'Traded' # Update the item's status as well
-    db.session.add(ItemHistory(item_id=session.item_id, user_id=current_user.user_id, action=f"Deal confirmed with user {session.user1_id if session.user2_id == current_user.user_id else session.user2_id}"))
-    db.session.commit()
-    flash('Deal successfully confirmed! The item is now marked as "Traded".', 'success')
-    return redirect(url_for('main.chat', session_id=session_id))
-
-# ADD this new route to block a user in a chat
 @main.route('/chat/<int:session_id>/block', methods=['POST'])
 @login_required
 def block_chat(session_id):
@@ -1622,19 +1584,6 @@ def items_list():
         query = query.filter(Item.title.ilike(f"%{search}%"))
     items = query.order_by(Item.created_at.desc()).all()
     return render_template("items/search_results.html", items=items)
-
-
-# =========================
-# AUTO-EXPIRE ITEMS
-# =========================
-def auto_expire_items():
-    now = datetime.utcnow()
-    expired_items = Item.query.filter(Item.expiry_date <= now, Item.status=="Active").all()
-    for item in expired_items:
-        item.status = "Expired"
-    db.session.commit()
-
-
 
 # =========================
 # ERROR HANDLERS
