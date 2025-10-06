@@ -23,12 +23,10 @@
               Edit
             </button>
 
-            <!-- Edit Modal -->
             <div class="modal fade" id="editSettingModal{{ setting.setting_id }}" tabindex="-1" aria-hidden="true">
               <div class="modal-dialog">
                 <div class="modal-content">
                   <form method="POST" action="{{ url_for('main.update_setting', setting_id=setting.setting_id) }}">
-                    {{ form.hidden_tag() }}
                     <div class="modal-header">
                       <h5 class="modal-title">Edit {{ setting.key }}</h5>
                       <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>

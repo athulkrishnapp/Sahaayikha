@@ -292,6 +292,57 @@ def login():
     return render_template("auth/user_login.html", form=form)
 
 
+@main.route("/admin/manage_users")
+@login_required
+@role_required("admin")
+def admin_manage_users():
+    search_query = request.args.get('search', '')
+    
+    # Query users
+    user_query = User.query
+    if search_query:
+        user_query = user_query.filter(or_(User.first_name.ilike(f'%{search_query}%'), User.last_name.ilike(f'%{search_query}%')))
+    users = user_query.order_by(User.first_name).all()
+
+    # Query organizations
+    org_query = Organization.query
+    if search_query:
+        org_query = org_query.filter(Organization.name.ilike(f'%{search_query}%'))
+    organizations = org_query.order_by(Organization.name).all()
+
+    return render_template("admin/manage_users.html", users=users, organizations=organizations)
+
+
+@main.route("/admin/user/<int:user_id>/toggle_status", methods=["POST"])
+@login_required
+@role_required("admin")
+def admin_toggle_user_status(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.status == "Active":
+        user.status = "Blocked"
+        flash(f"User '{user.first_name}' has been blocked.", "warning")
+    else:
+        user.status = "Active"
+        flash(f"User '{user.first_name}' has been unblocked.", "success")
+    db.session.commit()
+    return redirect(url_for("main.admin_manage_users"))
+
+
+@main.route("/admin/org/<int:org_id>/toggle_status", methods=["POST"])
+@login_required
+@role_required("admin")
+def admin_toggle_org_status(org_id):
+    org = Organization.query.get_or_404(org_id)
+    if org.status == "Approved":
+        org.status = "Blocked"
+        flash(f"Organization '{org.name}' has been blocked.", "warning")
+    else:
+        org.status = "Approved"
+        flash(f"Organization '{org.name}' has been unblocked.", "success")
+    db.session.commit()
+    return redirect(url_for("main.admin_manage_users"))
+
+
 @main.route("/logout")
 @login_required
 def logout():
@@ -325,8 +376,11 @@ def profile():
     elif isinstance(user, Organization):
         template = "auth/org_profile.html"
         form = OrganizationRegistrationForm(obj=user)
+    elif isinstance(user, Admin):
+        # Redirect admins to their own profile page
+        return redirect(url_for('main.admin_profile'))
     else:
-        flash("Profile not editable.", "warning")
+        flash("Profile not available.", "warning")
         return redirect(url_for("main.home"))
 
     form.password.validators = []
@@ -433,6 +487,35 @@ def admin_dashboard():
         feedback_count=feedback_count,
         reports_count=reports_count
     )
+
+@main.route("/admin/profile", methods=["GET", "POST"])
+@login_required
+@role_required("admin")
+def admin_profile():
+    admin = current_user._get_current_object()
+    form = RegistrationForm(obj=admin)
+    form.password.validators = []
+    form.confirm_password.validators = []
+
+    if form.validate_on_submit():
+        admin.first_name = form.first_name.data
+        admin.last_name = form.last_name.data
+        admin.email = form.email.data
+        if form.password.data:
+            admin.set_password(form.password.data)
+        db.session.commit()
+        flash("Admin profile updated successfully.", "success")
+        return redirect(url_for("main.admin_profile"))
+
+    return render_template("dashboard/admin_profile.html", form=form)
+
+
+@main.route("/admin/logs")
+@login_required
+@role_required("admin")
+def login_logs():
+    logs = LoginLog.query.order_by(LoginLog.login_time.desc()).all()
+    return render_template("dashboard/login_logs.html", logs=logs)
     
 
 
@@ -442,7 +525,6 @@ def admin_dashboard():
 def admin_feedbacks():
     feedbacks = Feedback.query.order_by(Feedback.submitted_at.desc()).all()
     return render_template("admin/admin_feedback.html", feedbacks=feedbacks)
-
 
 @main.route("/admin/reports")
 @login_required
@@ -461,6 +543,44 @@ def resolve_report(report_id):
     db.session.commit()
     flash("Report resolved.", "success")
     return redirect(url_for("main.admin_reports"))
+
+
+@main.route("/admin/reports/<int:report_id>/delete", methods=["POST"])
+@login_required
+@role_required("admin")
+def admin_report_delete(report_id):
+    report = Report.query.get_or_404(report_id)
+    db.session.delete(report)
+    db.session.commit()
+    flash("Report deleted.", "success")
+    return redirect(url_for("main.admin_reports"))
+
+
+@main.route("/admin/feedbacks/<int:feedback_id>/reply", methods=["POST"])
+@login_required
+@role_required("admin")
+def admin_feedback_reply(feedback_id):
+    feedback = Feedback.query.get_or_404(feedback_id)
+    notification = Notification(
+        user_id=feedback.user_id,
+        message="Thank you for your feedback! - Sahaayikha Team"
+    )
+    db.session.add(notification)
+    feedback.status = "Responded"
+    db.session.commit()
+    flash("A 'thank you' notification has been sent to the user.", "success")
+    return redirect(url_for("main.admin_feedbacks"))
+
+
+@main.route("/admin/feedbacks/<int:feedback_id>/delete", methods=["POST"])
+@login_required
+@role_required("admin")
+def admin_feedback_delete(feedback_id):
+    feedback = Feedback.query.get_or_404(feedback_id)
+    db.session.delete(feedback)
+    db.session.commit()
+    flash("Feedback deleted.", "success")
+    return redirect(url_for("main.admin_feedbacks"))
 
 
 # =========================
@@ -1019,6 +1139,33 @@ def follow_category(category):
         flash(f"Followed category: {category}", "success")
     return redirect(request.referrer or url_for("main.dashboard"))
 
+@main.route('/follow', methods=['GET', 'POST'])
+@login_required
+def follow_category_page():
+    form = CategoryFollowForm()
+    if form.validate_on_submit():
+        category = form.category.data
+        follow = CategoryFollow.query.filter_by(user_id=current_user.user_id, category=category).first()
+        if not follow:
+            db.session.add(CategoryFollow(user_id=current_user.user_id, category=category))
+            db.session.commit()
+            flash(f'You are now following {category}.', 'success')
+        else:
+            flash(f'You are already following {category}.', 'info')
+        return redirect(url_for('main.follow_category_page'))
+    
+    followed_categories = CategoryFollow.query.filter_by(user_id=current_user.user_id).all()
+    return render_template('features/follow_category.html', form=form, followed_categories=followed_categories)
+
+
+@main.route('/category/<string:category_name>')
+def category_items(category_name):
+    items = Item.query.filter_by(category=category_name, status='Active').order_by(Item.created_at.desc()).all()
+    # A simple way to get the category object if you had a Category model. 
+    # Since you don't, we'll just pass the name.
+    category = {'name': category_name}
+    return render_template('items/category_items.html', items=items, category=category)
+
 
 # =========================
 # DISASTER NEEDS & DONATIONS
@@ -1424,21 +1571,20 @@ def report_item(item_id):
 @main.route("/notifications")
 @login_required
 def notifications():
-    user_id = getattr(current_user, "user_id", None)
-    
-    # This also works for Organizations, as long as they have a 'user_id' like attribute or are handled
-    if not hasattr(current_user, 'user_id'): 
-        flash("Notifications are available for users and organizations.", "info")
+    user = current_user._get_current_object()
+
+    if not isinstance(user, User):
+        flash("Notifications are only available for registered users.", "info")
         return redirect(request.referrer or url_for('main.home'))
 
     # Mark all of the user's unread notifications as read
-    unread_notifications = Notification.query.filter_by(user_id=current_user.user_id, status="Unread").all()
+    unread_notifications = Notification.query.filter_by(user_id=user.user_id, status="Unread").all()
     for note in unread_notifications:
         note.status = "Read"
     db.session.commit()
     
     # Fetch all notifications for display, with the newest first
-    all_notifications = Notification.query.filter_by(user_id=current_user.user_id).order_by(Notification.sent_at.desc()).all()
+    all_notifications = Notification.query.filter_by(user_id=user.user_id).order_by(Notification.sent_at.desc()).all()
     return render_template("features/notifications.html", notifications=all_notifications)
 
 

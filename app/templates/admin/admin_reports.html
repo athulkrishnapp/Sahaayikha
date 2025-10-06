@@ -12,13 +12,14 @@
           <th>Reason</th>
           <th>Date</th>
           <th>Status</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for r in reports %}
         <tr>
           <td>{{ r.report_id }}</td>
-          <td>{{ r.user.first_name }} {{ r.user.last_name }}</td>
+          <td>{{ r.reporter.first_name }} {{ r.reporter.last_name }}</td>
           <td>
             {% if r.item %}
               <a href="{{ url_for('main.view_item', item_id=r.item.item_id) }}">{{ r.item.title }}</a>
@@ -28,11 +29,25 @@
           </td>
           <td>{{ r.reason }}</td>
           <td>{{ r.reported_at.strftime('%Y-%m-%d %H:%M') }}</td>
-          <td>{{ r.status }}</td>
+          <td>
+            {% if r.status == 'Resolved' %}
+                <span class="badge bg-success">{{ r.status }}</span>
+            {% else %}
+                <span class="badge bg-warning text-dark">{{ r.status }}</span>
+            {% endif %}
+          </td>
+          <td class="d-flex gap-2">
+              {% if r.status == 'Pending' %}
+              <a href="{{ url_for('main.resolve_report', report_id=r.report_id) }}" class="btn btn-sm btn-success">Resolve</a>
+              {% endif %}
+              <form action="{{ url_for('main.admin_report_delete', report_id=r.report_id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this report?');">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+              </form>
+          </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="6" class="text-center text-muted">No reports found.</td>
+          <td colspan="7" class="text-center text-muted">No reports found.</td>
         </tr>
         {% endfor %}
       </tbody>

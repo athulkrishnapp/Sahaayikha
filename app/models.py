@@ -78,7 +78,6 @@ class Organization(UserMixin, db.Model):
 
     # Relationships
     disaster_needs = db.relationship("DisasterNeed", backref="organization", lazy="dynamic")
-    verification_logs = db.relationship("OrganizationVerificationLog", backref="organization", lazy="dynamic")
 
     def set_password(self, raw_password):
         self.password = generate_password_hash(raw_password)
@@ -122,7 +121,6 @@ class Item(db.Model):
     chat_sessions = db.relationship("ChatSession", backref="item", lazy="dynamic")
     bookmarks = db.relationship("Bookmark", backref="item", lazy="dynamic")
     reports = db.relationship("Report", backref="item", lazy="dynamic")
-    verification_logs = db.relationship("OrganizationVerificationLog", backref="item", lazy="dynamic")
     images = db.relationship("ItemImage", backref="item", lazy="dynamic")
 
 class DealProposal(db.Model):
@@ -186,16 +184,6 @@ class ChatMessage(db.Model):
     image_url = db.Column(db.String(255), nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     deleted_at = db.Column(db.DateTime, nullable=True)
-
-
-# ---------- ORGANIZATION VERIFICATION LOG ----------
-class OrganizationVerificationLog(db.Model):
-    __tablename__ = "organization_verification_logs"
-    log_id = db.Column(db.Integer, primary_key=True)
-    org_id = db.Column(db.Integer, db.ForeignKey("organizations.org_id"), nullable=False)
-    item_id = db.Column(db.Integer, db.ForeignKey("items.item_id"), nullable=False)
-    verified_at = db.Column(db.DateTime, default=datetime.utcnow)
-    remarks = db.Column(db.Text)
 
 
 # ---------- DISASTER NEEDS ----------

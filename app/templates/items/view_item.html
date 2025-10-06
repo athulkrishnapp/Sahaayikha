@@ -156,7 +156,7 @@
 
             <h1 class="item-title">{{ item.title }}</h1>
             <div class="item-meta">
-                <span class="detail-badge">{{ item.category }}</span>
+                <a href="{{ url_for('main.category_items', category_name=item.category) }}" class="detail-badge text-decoration-none">{{ item.category }}</a>
                 <span class="detail-badge">{{ item.condition }}</span>
                 <span class="detail-badge">{{ item.urgency_level }}</span>
             </div>

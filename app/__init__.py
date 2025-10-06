@@ -26,8 +26,19 @@ def create_app(config_class=Config):
     from app.routes import main
     app.register_blueprint(main)
 
-    # Create database tables if not exist (development use)
+    # Create database tables and default settings
     with app.app_context():
         db.create_all()
+
+        # --- ADDED THIS SECTION TO POPULATE DEFAULT SETTINGS ---
+        from app.models import SystemSetting
+        # Check if settings already exist
+        if not SystemSetting.query.first():
+            # Create default settings
+            default_expiry = SystemSetting(key='ITEM_EXPIRY_DAYS', value='30')
+            maintenance_mode = SystemSetting(key='MAINTENANCE_MODE', value='false')
+            db.session.add(default_expiry)
+            db.session.add(maintenance_mode)
+            db.session.commit()
 
     return app
