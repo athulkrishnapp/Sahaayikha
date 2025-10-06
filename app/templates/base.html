@@ -209,5 +209,75 @@
             else window.location.href = "{{ url_for('main.home') }}";
         });
     </script>
+    {% if current_user.is_authenticated %}
+    <script type="module">
+    // Import the functions you need from the SDKs you need
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+    import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-messaging.js";
+
+    const firebaseConfig = {
+    apiKey: "AIzaSyD5X8PdNtRvCW4LGmL4wtbKyJta4MqHTM0",
+    authDomain: "sahaayikha.firebaseapp.com",
+    projectId: "sahaayikha",
+    storageBucket: "sahaayikha.firebasestorage.app",
+    messagingSenderId: "1058228709545",
+    appId: "1:1058228709545:web:41532a794a0868aebf61b8",
+    measurementId: "G-XMW111NJHK"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const messaging = getMessaging(app);
+
+    async function registerForNotifications() {
+        try {
+        // 1. Ask for permission
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+            console.log('Notification permission not granted.');
+            return;
+        }
+
+        // 2. Get the device token from Firebase
+        // IMPORTANT: You need a 'firebase-messaging-sw.js' file for this to work.
+        const fcmToken = await getToken(messaging, { vapidKey: 'BGSjvfkIRbpIzYpgq9nueC98PH1bWr956f7Zd1ruHvP0yplk6F56xcF1hjk8BkvdTmckCh3vM_e3Q_RxwO0M7xg' }); // <-- PASTE YOUR VAPID KEY
+
+        if (fcmToken) {
+            console.log('Got FCM Token:', fcmToken);
+            
+            // 3. Send the token to your Flask backend
+            const response = await fetch('/register_fcm_token', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ token: fcmToken }),
+            });
+            if (response.ok) {
+                console.log('Token sent to server successfully.');
+            } else {
+                console.error('Failed to send token to server.');
+            }
+        } else {
+            console.log('No registration token available. Request permission to generate one.');
+        }
+        } catch (error) {
+        console.error('An error occurred while retrieving token. ', error);
+        }
+    }
+
+    // When the user is logged in, automatically try to register for notifications.
+    registerForNotifications();
+
+    // Handle incoming messages when the app is in the foreground
+    onMessage(messaging, (payload) => {
+        console.log('Message received. ', payload);
+        // You can show a custom, in-app notification here if you want
+        alert(payload.notification.title + "\n" + payload.notification.body);
+    });
+
+    </script>
+    {% endif %}
+
 </body>
 </html>

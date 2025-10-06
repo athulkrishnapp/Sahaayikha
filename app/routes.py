@@ -9,6 +9,9 @@ from flask_login import (
     login_user, logout_user, current_user,
     login_required
 )
+
+from flask import send_from_directory
+
 from werkzeug.utils import secure_filename
 from sqlalchemy import or_
 
@@ -23,9 +26,12 @@ from app.models import (
 )
 from app.forms import (
     RegistrationForm, OrganizationRegistrationForm, LoginForm,
-    ItemForm, FeedbackForm, ReportForm,
+    ItemForm, FeedbackForm, ReportForm, OrganizationReportForm,
     CategoryFollowForm, DisasterNeedForm, DonationOfferForm, ChatForm
 )
+
+from app.firebase_service import send_push_notification
+
 
 main = Blueprint("main", __name__)
 
@@ -146,58 +152,63 @@ def get_keywords(text):
 
 def send_smart_notifications(new_item):
     """
-    Finds users who might be interested in the new item and sends them notifications.
+    Finds users who might be interested in the new item, creates in-app notifications,
+    and sends push notifications.
     """
-    users_to_notify = set()
-    
-    # 1. Notify users following the exact category
+    users_to_notify = {} # Use a dictionary to store user object and reason
+
+    # 1. AI Match: Notify users following the item's category
     followers = CategoryFollow.query.filter_by(category=new_item.category).all()
     for follow in followers:
         if follow.user_id != new_item.user_id:
-            users_to_notify.add(follow.user_id)
+            users_to_notify[follow.user.user_id] = follow.user
 
-    # 2. AI Match: Notify users whose followed categories are mentioned in the title/description
-    item_keywords = get_keywords(new_item.title) | get_keywords(new_item.description)
-    if item_keywords:
-        all_followed_categories = [cat[0] for cat in db.session.query(CategoryFollow.category).distinct().all()]
-        for category_name in all_followed_categories:
-            if category_name.lower() in item_keywords:
-                keyword_followers = CategoryFollow.query.filter_by(category=category_name).all()
-                for follow in keyword_followers:
-                    if follow.user_id != new_item.user_id:
-                        users_to_notify.add(follow.user_id)
-
-    # 3. AI Match: Find users with items that are a potential trade match
-    if new_item.type == 'Trade' and new_item.expected_return:
-        # Find items where the CATEGORY matches what the NEW ITEM wants in return
-        potential_matches_A = Item.query.filter(
-            Item.category == new_item.expected_return,
-            Item.user_id != new_item.user_id,
-            Item.status == 'Active'
-        ).all()
-        for match_item in potential_matches_A:
-            users_to_notify.add(match_item.user_id)
-        
-        # Find items where the EXPECTED RETURN matches the NEW ITEM's category
-        potential_matches_B = Item.query.filter(
-            Item.expected_return == new_item.category,
-            Item.user_id != new_item.user_id,
-            Item.status == 'Active'
-        ).all()
-        for match_item in potential_matches_B:
-            users_to_notify.add(match_item.user_id)
-
-    # Create and save notifications, avoiding duplicates for the same item
-    for user_id in users_to_notify:
+    # Create and save notifications
+    for user_id, user in users_to_notify.items():
+        # Avoid duplicate notifications for the same item
         exists = Notification.query.filter_by(user_id=user_id, item_id=new_item.item_id).first()
         if not exists:
+            message_text = f"AI Match: A new item '{new_item.title}' was posted in a category you follow."
             notification = Notification(
                 user_id=user_id,
                 item_id=new_item.item_id,
-                message=f"New AI Match: Item '{new_item.title}' in {new_item.category} might interest you!"
+                message=message_text
             )
             db.session.add(notification)
+
+            # Send push notification if the user has a token
+            if user.fcm_token:
+                send_push_notification(
+                    token=user.fcm_token,
+                    title="New Item Match!",
+                    body=message_text,
+                    data={'item_id': str(new_item.item_id)}
+                )
+    db.session.commit()
+
+
+def send_disaster_notifications(new_need):
+    """
+    Finds users in the same location as a new disaster need and notifies them.
+    """
+    users_in_location = User.query.filter_by(location=new_need.location).all()
     
+    for user in users_in_location:
+        message_text = f"New Disaster Need in your area: '{new_need.title}' posted by {new_need.organization.name}."
+        notification = Notification(
+            user_id=user.user_id,
+            message=message_text
+        )
+        db.session.add(notification)
+
+        # Send push notification
+        if user.fcm_token:
+            send_push_notification(
+                token=user.fcm_token,
+                title="Disaster Need Alert!",
+                body=message_text,
+                data={'location': new_need.location}
+            )
     db.session.commit()
 
 # -------------------------
@@ -608,6 +619,9 @@ def org_dashboard():
         )
         db.session.add(new_need)
         db.session.commit()
+
+        send_disaster_notifications(new_need)
+
         flash("New disaster need has been posted successfully.", "success")
         return redirect(url_for('main.org_dashboard', filter='needs'))
 
@@ -1183,7 +1197,9 @@ def view_my_offer(offer_id):
     if offer.user_id != current_user.user_id:
         abort(403)
 
-    return render_template("features/view_my_offer.html", offer=offer)
+    form = OrganizationReportForm()
+
+    return render_template("features/view_my_offer.html", offer=offer, form=form)
 
 # 3. PAGE FOR AN ORGANIZATION TO REVIEW A SPECIFIC OFFER
 # --- 1. UPDATE the review_donation_offer route ---
@@ -1584,6 +1600,67 @@ def items_list():
         query = query.filter(Item.title.ilike(f"%{search}%"))
     items = query.order_by(Item.created_at.desc()).all()
     return render_template("items/search_results.html", items=items)
+
+
+
+# =========================
+# notification delete and org report
+# =========================
+
+
+@main.route("/notification/<int:notification_id>/delete", methods=["POST"])
+@login_required
+def delete_notification(notification_id):
+    notification = Notification.query.get_or_404(notification_id)
+    if notification.user_id != current_user.user_id:
+        abort(403)
+    
+    db.session.delete(notification)
+    db.session.commit()
+    flash("Notification deleted.", "info")
+    return redirect(url_for("main.notifications"))
+
+@main.route('/report/organization/<int:offer_id>', methods=['GET', 'POST'])
+@login_required
+@role_required('user')
+def report_organization(offer_id):
+    offer = DonationOffer.query.get_or_404(offer_id)
+    # Security check: ensure the current user is the one who made the offer
+    if offer.user_id != current_user.user_id:
+        abort(403)
+    
+    form = OrganizationReportForm()
+    if form.validate_on_submit():
+        new_report = Report(
+            reported_by=current_user.user_id,
+            reported_org_id=offer.org_id,
+            donation_offer_id=offer.offer_id,
+            reason=form.reason.data
+        )
+        db.session.add(new_report)
+        db.session.commit()
+        flash('Your report has been submitted to the administrators. Thank you.', 'success')
+        return redirect(url_for('main.view_my_offer', offer_id=offer_id))
+    
+    # This route will likely be called via a modal, but having a template is good practice
+    return render_template('features/report_organization.html', form=form, offer=offer)
+
+# --- ADD a route to register a device token (for the app to call) ---
+@main.route('/register_fcm_token', methods=['POST'])
+@login_required
+def register_fcm_token():
+    token = request.json.get('token')
+    if token:
+        current_user.fcm_token = token
+        db.session.commit()
+        return jsonify({'success': True}), 200
+    return jsonify({'success': False, 'error': 'No token provided'}), 400
+
+@main.route('/firebase-messaging-sw.js')
+def firebase_messaging_sw():
+    return send_from_directory('static', 'firebase-messaging-sw.js')
+
+
 
 # =========================
 # ERROR HANDLERS

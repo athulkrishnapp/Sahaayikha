@@ -298,3 +298,7 @@ class ChatForm(FlaskForm):
     message = StringField('Message', validators=[Optional(), Length(max=1000)])
     image = FileField('Image', validators=[Optional(), FileAllowed(['jpg', 'png', 'jpeg', 'gif'])])
     submit = SubmitField('Send')
+
+class OrganizationReportForm(FlaskForm):
+    reason = TextAreaField('Reason for Reporting', validators=[DataRequired(), Length(min=10, max=1000)])
+    submit = SubmitField('Submit Report')

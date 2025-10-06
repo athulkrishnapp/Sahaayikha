@@ -1,17 +1,39 @@
 {% extends "base.html" %}
 {% block content %}
+<style>
+    .notification-item {
+        transition: background-color 0.3s ease;
+    }
+    .notification-item.unread {
+        background-color: var(--bs-primary-bg-subtle);
+        border-left: 4px solid var(--bs-primary);
+    }
+    .delete-btn {
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+    .notification-item:hover .delete-btn {
+        opacity: 1;
+    }
+</style>
+
 <div class="container py-4">
   <h2 class="mb-4">Notifications</h2>
   <div class="list-group">
     {% for n in notifications %}
-      {# Make the entire list item a link if the notification is linked to an item #}
-      <a href="{{ url_for('main.view_item', item_id=n.item_id) if n.item_id else '#' }}" 
-         class="list-group-item list-group-item-action {% if n.status == 'Unread' and loop.index0 < 5 %}list-group-item-primary{% endif %}">
-        <div class="d-flex justify-content-between align-items-center">
-          <span>{{ n.message }}</span>
-          <small class="text-muted">{{ n.sent_at.strftime('%Y-%m-%d %H:%M') }}</small>
-        </div>
-      </a>
+      <div class="list-group-item notification-item d-flex justify-content-between align-items-center {% if n.status == 'Unread' %}unread{% endif %}">
+        <a href="{{ url_for('main.view_item', item_id=n.item_id) if n.item_id else '#' }}" class="text-decoration-none text-body flex-grow-1">
+          <div>
+            <span>{{ n.message }}</span>
+            <small class="d-block text-muted mt-1">{{ (n.sent_at | localdatetime).strftime('%b %d, %Y %I:%M %p') }}</small>
+          </div>
+        </a>
+        <form action="{{ url_for('main.delete_notification', notification_id=n.notification_id) }}" method="POST" onsubmit="return confirm('Delete this notification?');">
+            <button type="submit" class="btn btn-sm btn-outline-danger delete-btn" title="Delete Notification">
+                <i class="fas fa-trash-alt"></i>
+            </button>
+        </form>
+      </div>
     {% else %}
       <div class="list-group-item text-center text-muted">You have no notifications.</div>
     {% endfor %}

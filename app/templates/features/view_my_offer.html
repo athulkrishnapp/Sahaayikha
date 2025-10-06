@@ -1,151 +1,222 @@
 {% extends "base.html" %}
+{% from "includes/_form_macros.html" import render_field %}
+
 {% block content %}
 <style>
+    /* ---------------------------------- */
+    /* --- Modern Offer Details Styles --- */
+    /* ---------------------------------- */
+    :root {
+        --card-bg: var(--bs-body-bg);
+        --border-color: var(--bs-border-color);
+        --subtle-bg: var(--bs-tertiary-bg);
+    }
+    .dark-mode {
+        --card-bg: #2c2c3a;
+        --border-color: rgba(255, 255, 255, 0.1);
+        --subtle-bg: rgba(255, 255, 255, 0.05);
+    }
+    .page-header { margin-bottom: 2.5rem; }
+    .page-header h1 { font-weight: 800; }
+
+    .main-content .card {
+        border: none;
+        border-radius: 0.75rem;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+        background-color: var(--card-bg);
+    }
+    .dark-mode .main-content .card {
+        box-shadow: none;
+        border: 1px solid var(--border-color);
+    }
+    .proof-card img {
+        max-height: 400px;
+        width: 100%;
+        object-fit: cover;
+        border-radius: 0.5rem;
+    }
+
+    /* --- NEW PROFESSIONAL TIMELINE --- */
     .timeline {
         list-style: none;
-        padding: 1rem 0;
-        margin: 0;
-        position: relative;
-    }
-    .timeline::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 12px;
-        height: 100%;
-        width: 4px;
-        background: var(--border);
+        padding-left: 0;
+        margin-left: 1rem;
     }
     .timeline-item {
-        margin-bottom: 2rem;
         position: relative;
-        padding-left: 40px;
+        padding-left: 2.5rem;
+        padding-bottom: 2.5rem; /* Increased spacing */
+        border-left: 2px solid var(--border-color);
     }
-    .timeline-item::before {
-        content: '';
+    .timeline-item:last-child {
+        border-left-color: transparent;
+        padding-bottom: 0.5rem;
+    }
+    .timeline-marker {
         position: absolute;
-        left: 4px;
-        top: 4px;
-        width: 20px;
-        height: 20px;
+        left: -0.7rem;
+        top: 0.1rem;
+        width: 1.25rem;
+        height: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         border-radius: 50%;
-        background: var(--secondary);
-        border: 4px solid var(--border);
-        z-index: 1;
+        background-color: var(--card-bg);
+        border: 2px solid var(--border-color);
+        font-size: 0.7rem;
+        color: transparent;
+        transition: all 0.3s ease;
     }
-    .timeline-item.completed::before {
-        background: var(--bs-success);
-        border-color: var(--bs-success-bg-subtle);
+    .timeline-title { font-weight: 600; font-size: 0.95rem; }
+    .timeline-subtitle { font-size: 0.8rem; color: var(--bs-secondary-color); }
+
+    /* Timeline Status States */
+    .timeline-item.completed .timeline-marker {
+        background-color: var(--bs-success);
+        border-color: var(--bs-success);
+        color: white;
     }
-    .timeline-item.active::before {
-        background: var(--primary);
-        border-color: var(--bs-primary-bg-subtle);
+    .timeline-item.completed .timeline-marker::before {
+        content: '\f00c'; font-family: 'Font Awesome 6 Free'; font-weight: 900;
     }
-    .timeline-item.failed::before {
-        background: var(--bs-danger);
-        border-color: var(--bs-danger-bg-subtle);
+    .timeline-item.completed { border-left-color: var(--bs-success); }
+
+
+    .timeline-item.active .timeline-marker {
+        border-color: var(--bs-primary);
+        transform: scale(1.1);
     }
-    .timeline-item-title {
-        font-weight: 600;
+    .timeline-item.active .timeline-marker::after {
+        content: '';
+        display: block;
+        width: 0.6rem; height: 0.6rem;
+        border-radius: 50%;
+        background-color: var(--bs-primary);
     }
-    .timeline-item-subtitle {
-        font-size: 0.875rem;
-        color: var(--muted-foreground);
+
+    .timeline-item.failed .timeline-marker {
+        background-color: var(--bs-danger);
+        border-color: var(--bs-danger);
+        color: white;
+    }
+    .timeline-item.failed .timeline-marker::before {
+        content: '\f00d'; font-family: 'Font Awesome 6 Free'; font-weight: 900;
     }
 </style>
 
 <div class="container py-5">
-    <div class="row">
+    <div class="page-header">
+        <h1 class="display-5">Donation Offer Details</h1>
+        <p class="lead text-muted">Tracking your contribution for the need: <span class="fw-bold">{{ offer.need.title }}</span>.</p>
+    </div>
+
+    <div class="row g-4 main-content">
         <div class="col-lg-8">
-            <h1 class="fw-bold">Donation Offer Details</h1>
-            <p class="text-muted">For need: <span class="fw-bold">{{ offer.need.title }}</span> to {{ offer.organization.name }}</p>
-            
-            <div class="card mt-4">
-                <div class="card-header">
-                    <h5 class="mb-0">Offered Items</h5>
+            <div class="card mb-4">
+                <div class="card-header bg-transparent border-0 pt-3">
+                    <h5 class="mb-0 fw-bold">Items You Offered</h5>
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-striped mb-0">
-                        <thead>
-                            <tr>
-                                <th>Item Name</th>
-                                <th>Category</th>
-                                <th>Qty</th>
-                                <th>Condition</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in offer.offered_items %}
-                            <tr>
-                                <td>{{ item.title }}</td>
-                                <td>{{ item.category }}</td>
-                                <td>{{ item.quantity }}</td>
-                                <td>{{ item.condition }}</td>
-                                <td>
-                                    {% if item.status == 'Accepted' %}
-                                        <span class="badge bg-success">Accepted</span>
-                                    {% elif item.status == 'Rejected' %}
-                                        <span class="badge bg-danger">Rejected</span>
-                                    {% else %}
-                                        <span class="badge bg-secondary">Pending</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-borderless table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Item Name</th>
+                                    <th>Category</th>
+                                    <th class="text-center">Qty</th>
+                                    <th>Condition</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in offer.offered_items %}
+                                <tr>
+                                    <td class="align-middle fw-medium">{{ item.title }}</td>
+                                    <td class="align-middle text-muted">{{ item.category }}</td>
+                                    <td class="align-middle text-center">{{ item.quantity }}</td>
+                                    <td class="align-middle">{{ item.condition }}</td>
+                                    <td class="align-middle">
+                                        {% if item.status == 'Accepted' %}<span class="badge rounded-pill text-bg-success">Accepted</span>
+                                        {% elif item.status == 'Rejected' %}<span class="badge rounded-pill text-bg-danger">Rejected</span>
+                                        {% else %}<span class="badge rounded-pill text-bg-secondary">Pending</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
             {% if offer.status == 'Completed' and offer.proof_image_url %}
-            <div class="card mt-4">
-                <div class="card-header"><h5 class="mb-0">Donation Proof</h5></div>
+            <div class="card proof-card">
+                <div class="card-header bg-transparent border-0 pt-3">
+                    <h5 class="mb-0 fw-bold">Donation Proof</h5>
+                </div>
                 <div class="card-body">
-                    <p>The organization has marked this donation as complete. Thank you for your contribution!</p>
+                    <p class="text-muted">The organization has marked this donation as complete. Thank you for your contribution!</p>
                     <img src="{{ url_for('static', filename=offer.proof_image_url) }}" class="img-fluid rounded border">
                 </div>
             </div>
             {% endif %}
-
         </div>
+
         <div class="col-lg-4">
             <div class="card">
-                <div class="card-header"><h5 class="mb-0">Offer Status</h5></div>
+                <div class="card-header bg-transparent border-0 pt-3">
+                    <h5 class="mb-0 fw-bold">Offer Status</h5>
+                </div>
                 <div class="card-body">
                     {% set statuses = ['Pending Review', 'Awaiting Pickup', 'Donation Pending', 'Completed'] %}
-                    <ol class="timeline">
+                    <div class="timeline">
                         {% for status in statuses %}
-                            {# --- MODIFIED LOGIC --- #}
-                            {# Treat 'Accepted' and 'Partially Accepted' as if they are 'Awaiting Pickup' for the timeline calculation #}
                             {% set effective_offer_status = 'Awaiting Pickup' if offer.status in ['Accepted', 'Partially Accepted'] else offer.status %}
-
-                            {% set is_completed = (statuses.index(effective_offer_status) > statuses.index(status)) if effective_offer_status in statuses else False %}
-                            {% set is_active = effective_offer_status == status %}
                             
-                            <li class="timeline-item {{ 'completed' if is_completed }} {{ 'active' if is_active }}">
-                                <div class="timeline-item-title">{{ status }}</div>
-                                <div class="timeline-item-subtitle">
-                                    {# ... your existing subtitle logic is fine ... #}
+                            {% set current_status_index = statuses.index(effective_offer_status) if effective_offer_status in statuses else -1 %}
+                            {% set loop_index = loop.index0 %}
+
+                            {% set is_completed = current_status_index > loop_index %}
+                            {% set is_active = current_status_index == loop_index %}
+                            
+                            {# Special case for the final 'Completed' status #}
+                            {% if offer.status == 'Completed' and status == 'Completed' %}
+                                {% set is_completed = True %}
+                                {% set is_active = False %}
+                            {% endif %}
+
+                            <div class="timeline-item {{ 'completed' if is_completed and offer.status not in ['Rejected', 'Pickup Failed'] }} {{ 'active' if is_active }}">
+                                <div class="timeline-marker"></div>
+                                <div class="timeline-content">
+                                    <div class="timeline-title">{{ status }}</div>
+                                    <div class="timeline-subtitle">{{ offer.organization.name }}</div>
                                 </div>
-                            </li>
+                            </div>
                         {% endfor %}
 
                         {% if offer.status == 'Pickup Failed' %}
-                        <li class="timeline-item failed">
-                            <div class="timeline-item-title">Pickup Failed</div>
-                            <div class="timeline-item-subtitle">The offer has been cancelled after a pickup retry.</div>
-                        </li>
+                        <div class="timeline-item failed">
+                            <div class="timeline-marker"></div>
+                            <div class="timeline-content">
+                                <div class="timeline-title">Pickup Failed</div>
+                                <div class="timeline-subtitle">The offer was cancelled after a retry.</div>
+                            </div>
+                        </div>
                         {% elif offer.status == 'Rejected' %}
-                        <li class="timeline-item failed">
-                            <div class="timeline-item-title">Offer Rejected</div>
-                        </li>
+                        <div class="timeline-item failed">
+                            <div class="timeline-marker"></div>
+                             <div class="timeline-content">
+                                <div class="timeline-title">Offer Rejected</div>
+                            </div>
+                        </div>
                         {% endif %}
-                    </ol>
-                    
+                    </div>
+                </div>
+
+                <div class="card-footer bg-transparent border-0 p-3">
                     {% if offer.status == 'Pending Review' %}
-                    <hr>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex gap-2 mb-2">
                         <a href="{{ url_for('main.edit_donation_offer', offer_id=offer.offer_id) }}" class="btn btn-outline-primary w-100">
                             <i class="fas fa-edit"></i> Edit Offer
                         </a>
@@ -156,8 +227,33 @@
                         </form>
                     </div>
                     {% endif %}
+                    <button type="button" class="btn btn-outline-danger w-100" data-bs-toggle="modal" data-bs-target="#reportOrgModal">
+                        <i class="fas fa-flag"></i> Report Organization
+                    </button>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="reportOrgModal" tabindex="-1" aria-labelledby="reportOrgModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="reportOrgModalLabel">Report {{ offer.organization.name }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('main.report_organization', offer_id=offer.offer_id) }}">
+                <div class="modal-body">
+                    <p>You are reporting this organization in relation to your offer for "{{ offer.need.title }}". Please state your reason clearly.</p>
+                    {{ form.hidden_tag() }}
+                    {{ render_field(form.reason, class="form-control", rows="5") }}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    {{ form.submit(class="btn btn-danger") }}
+                </div>
+            </form>
         </div>
     </div>
 </div>

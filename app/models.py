@@ -16,6 +16,9 @@ class User(UserMixin, db.Model):
     profile_picture = db.Column(db.String(255), nullable=True)
     status = db.Column(db.String(50), default="Active")  # Active / Blocked / Deactivated
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    fcm_token = db.Column(db.String(255), nullable=True) # <-- ADD THIS LINE
+
+
 
     # Relationships
     items = db.relationship("Item", backref="owner", lazy="dynamic")
@@ -262,9 +265,11 @@ class Report(db.Model):
     report_id = db.Column(db.Integer, primary_key=True)
     reported_by = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
     item_id = db.Column(db.Integer, db.ForeignKey("items.item_id"), nullable=True)
-    
-    # ## ADD THIS LINE ##
     chat_session_id = db.Column(db.Integer, db.ForeignKey("chat_sessions.session_id"), nullable=True)
+    
+    # --- ADD THESE TWO LINES for reporting an organization regarding a donation ---
+    reported_org_id = db.Column(db.Integer, db.ForeignKey("organizations.org_id"), nullable=True)
+    donation_offer_id = db.Column(db.Integer, db.ForeignKey("donation_offers.offer_id"), nullable=True)
 
     reason = db.Column(db.Text, nullable=False)
     reported_at = db.Column(db.DateTime, default=datetime.utcnow)
