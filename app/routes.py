@@ -1,3 +1,5 @@
+# app/routes.py
+
 import os
 from datetime import datetime, timedelta
 from functools import wraps
@@ -27,7 +29,8 @@ from app.models import (
 from app.forms import (
     RegistrationForm, OrganizationRegistrationForm, LoginForm,
     ItemForm, FeedbackForm, ReportForm, OrganizationReportForm,
-    CategoryFollowForm, DisasterNeedForm, DonationOfferForm, ChatForm
+    CategoryFollowForm, DisasterNeedForm, DonationOfferForm, ChatForm,
+    SearchForm
 )
 
 from app.firebase_service import send_push_notification
@@ -1808,17 +1811,40 @@ def chat(session_id):
 # =========================
 # ITEM SEARCH / FILTER
 # =========================
-@main.route("/items")
+@main.route("/items", methods=['GET'])
 def items_list():
+    form = SearchForm(request.args)
     query = Item.query.filter_by(status="Active")
-    category = request.args.get("category")
-    if category:
-        query = query.filter_by(category=category)
-    search = request.args.get("search")
+
+    search = request.args.get('search')
+    location = request.args.get('location')
+    urgency = request.args.get('urgency')
+    condition = request.args.get('condition')
+    sort_by = request.args.get('sort_by', 'newest')
+
     if search:
         query = query.filter(Item.title.ilike(f"%{search}%"))
-    items = query.order_by(Item.created_at.desc()).all()
-    return render_template("items/search_results.html", items=items)
+    if location:
+        query = query.filter_by(location=location)
+    if urgency:
+        query = query.filter_by(urgency_level=urgency)
+    if condition:
+        query = query.filter_by(condition=condition)
+
+    if sort_by == 'oldest':
+        query = query.order_by(Item.created_at.asc())
+    else:
+        query = query.order_by(Item.created_at.desc())
+    
+    items = query.all()
+
+    form.search.data = search
+    form.location.data = location
+    form.urgency.data = urgency
+    form.condition.data = condition
+    form.sort_by.data = sort_by
+
+    return render_template("items/search_results.html", items=items, form=form)
 
 
 # =========================

@@ -1,17 +1,47 @@
 {% extends "base.html" %}
 {% block content %}
+<style>
+    .item-card-image-container {
+        width: 100%;
+        padding-top: 56.25%; /* 16:9 Aspect Ratio */
+        position: relative;
+        overflow: hidden;
+    }
+
+    .item-card-image {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+</style>
 <div class="container py-4">
-  {% set search_query = request.args.get('search') %}
-  {% set category_query = request.args.get('category') %}
-  
-  {# Determine the title based on search parameters #}
-  {% if search_query %}
-    <h2 class="mb-4">Search Results for: "<span class="fw-bold">{{ search_query }}</span>"</h2>
-  {% elif category_query %}
-    <h2 class="mb-4">Items in Category: <span class="fw-bold">{{ category_query }}</span></h2>
-  {% else %}
-    <h2 class="mb-4">All Items Matching Search Criteria</h2>
-  {% endif %}
+  <h2 class="mb-4">Search Items</h2>
+
+  <form method="GET" action="{{ url_for('main.items_list') }}" class="mb-4">
+    <div class="row g-2">
+      <div class="col-md-6">
+        {{ form.search(class="form-control", placeholder="Search by title...") }}
+      </div>
+      <div class="col-md-2">
+        {{ form.location(class="form-select") }}
+      </div>
+      <div class="col-md-2">
+        {{ form.urgency(class="form-select") }}
+      </div>
+      <div class="col-md-2">
+        {{ form.condition(class="form-select") }}
+      </div>
+      <div class="col-md-2">
+        {{ form.sort_by(class="form-select") }}
+      </div>
+      <div class="col-md-2">
+        {{ form.submit(class="btn btn-primary w-100") }}
+      </div>
+    </div>
+  </form>
 
   <div class="row g-4">
     {# Loop through items. The 'else' block handles the case where the list is empty. #}
@@ -19,11 +49,13 @@
       <div class="col-md-4">
         <div class="card shadow h-100">
           {# Display the first image or a placeholder #}
-          {% if item.images.first() %}
-            <img src="{{ url_for('static', filename=item.images.first().image_url) }}" class="card-img-top" alt="{{ item.title }}">
-          {% else %}
-            <img src="{{ url_for('static', filename='images/item_placeholder.jpg') }}" class="card-img-top" alt="{{ item.title }}">
-          {% endif %}
+          <div class="item-card-image-container">
+            {% if item.images.first() %}
+              <img src="{{ url_for('static', filename=item.images.first().image_url) }}" class="item-card-image" alt="{{ item.title }}">
+            {% else %}
+              <img src="{{ url_for('static', filename='images/item_placeholder.jpg') }}" class="item-card-image" alt="{{ item.title }}">
+            {% endif %}
+          </div>
           <div class="card-body">
             <h5 class="card-title">{{ item.title }}</h5>
             <p class="card-text small text-muted">{{ item.condition }} • {{ item.urgency_level }}</p>
@@ -36,11 +68,7 @@
       <div class="col-12">
         <div class="alert alert-info text-center" role="alert">
           <i class="fas fa-search-minus me-2"></i> 
-          {% if category_query %}
-            No active posts found in the **{{ category_query }}** category.
-          {% else %}
-            No items match your search criteria.
-          {% endif %}
+          No items match your search criteria.
         </div>
       </div>
     {% endfor %}

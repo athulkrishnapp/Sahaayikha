@@ -1,3 +1,5 @@
+# app/forms.py
+
 from flask_wtf import FlaskForm
 from wtforms import (
     StringField, PasswordField, SubmitField, TextAreaField,
@@ -184,6 +186,17 @@ EXPECTED_RETURN_CHOICES = [
     ('Vehicles & Accessories', 'Vehicles & Accessories'),
     ('Other', 'Other')
 ]
+
+# -------------------------
+# Search and Filter Forms
+# -------------------------
+class SearchForm(FlaskForm):
+    search = StringField('Search', validators=[Optional()])
+    location = SelectField('Location', choices=[('', 'All Locations')] + KERALA_LOCATIONS, validators=[Optional()])
+    urgency = SelectField('Urgency', choices=[('', 'All Urgencies'), ('Urgent', 'Urgent'), ('Flexible', 'Flexible')], validators=[Optional()])
+    condition = SelectField('Condition', choices=[('', 'All Conditions'), ('New', 'New'), ('Used', 'Used'), ('Old', 'Old')], validators=[Optional()])
+    sort_by = SelectField('Sort by', choices=[('newest', 'Newest'), ('oldest', 'Oldest')], default='newest', validators=[Optional()])
+    submit = SubmitField('Search')
 # -------------------------
 # User / Org / Admin Forms
 # -------------------------
