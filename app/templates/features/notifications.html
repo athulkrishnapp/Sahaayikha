@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
+    /* ... (existing styles) ... */
     .notification-item {
         transition: background-color 0.3s ease;
     }
@@ -15,10 +16,39 @@
     .notification-item:hover .delete-btn {
         opacity: 1;
     }
+    /* NEW: Style for the active tab */
+    .nav-link.active.notifications-tab {
+        font-weight: bold;
+    }
 </style>
 
 <div class="container py-4">
   <h2 class="mb-4">Notifications</h2>
+
+  {# NEW: Navigation Tabs for Filtering #}
+  <ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link notifications-tab {% if current_filter == 'unread' %}active{% endif %}" 
+           href="{{ url_for('main.notifications', filter='unread') }}">
+            Unread Messages
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link notifications-tab {% if current_filter == 'read' %}active{% endif %}" 
+           href="{{ url_for('main.notifications', filter='read') }}">
+            Read Messages
+        </a>
+    </li>
+  </ul>
+  
+  <h4 class="mb-3 text-muted">
+    {% if current_filter == 'read' %}
+        Read Messages ({{ notifications|length }})
+    {% else %}
+        Unread Messages ({{ notifications|length }})
+    {% endif %}
+  </h4>
+
   <div class="list-group">
     {% for n in notifications %}
       <div class="list-group-item notification-item d-flex justify-content-between align-items-center {% if n.status == 'Unread' %}unread{% endif %}">
@@ -28,6 +58,16 @@
             <small class="d-block text-muted mt-1">{{ (n.sent_at | localdatetime).strftime('%b %d, %Y %I:%M %p') }}</small>
           </div>
         </a>
+        
+        {# Display status badge #}
+        <div class="me-3">
+            {% if n.status == 'Unread' %}
+                <span class="badge bg-primary">Unread</span>
+            {% else %}
+                <span class="badge bg-secondary">Read</span>
+            {% endif %}
+        </div>
+        
         <form action="{{ url_for('main.delete_notification', notification_id=n.notification_id) }}" method="POST" onsubmit="return confirm('Delete this notification?');">
             <button type="submit" class="btn btn-sm btn-outline-danger delete-btn" title="Delete Notification">
                 <i class="fas fa-trash-alt"></i>
@@ -35,7 +75,13 @@
         </form>
       </div>
     {% else %}
-      <div class="list-group-item text-center text-muted">You have no notifications.</div>
+      <div class="list-group-item text-center text-muted">
+        {% if current_filter == 'read' %}
+          No read messages to display.
+        {% else %}
+          You have no unread notifications.
+        {% endif %}
+      </div>
     {% endfor %}
   </div>
 </div>

@@ -100,6 +100,16 @@
 
         <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
             <ul class="navbar-nav align-items-center">
+                
+                {# NEW: Search Icon (User Only) #}
+                {% if current_user.is_authenticated and current_user.__class__.__name__ == 'User' %}
+                <li class="nav-item ms-2">
+                    <button class="btn btn-outline-secondary navbar-icon-btn" data-bs-toggle="modal" data-bs-target="#searchModal" title="Search Items">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </li>
+                {% endif %}
+                
                 {% if current_user.is_authenticated %}
                     <li class="nav-item ms-2">
                         <button id="darkModeToggle" class="btn btn-outline-secondary">
@@ -108,8 +118,15 @@
                     </li>
                     {% if current_user.__class__.__name__ == 'User' %}
                     <li class="nav-item ms-2">
-                        <a class="nav-link navbar-icon-btn" href="{{ url_for('main.notifications') }}" title="Notifications">
+                        <a class="nav-link navbar-icon-btn position-relative" href="{{ url_for('main.notifications') }}" title="Notifications">
                             <i class="fas fa-bell"></i>
+                            {# Red bubble for unread count #}
+                            {% if unread_count and unread_count > 0 %}
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                                {{ unread_count }}
+                                <span class="visually-hidden">unread messages</span>
+                            </span>
+                            {% endif %}
                         </a>
                     </li>
                     {% endif %}
@@ -178,6 +195,45 @@
     <main>
         {% block content %}{% endblock %}
     </main>
+    
+    {# NEW: Search Modal #}
+    <div class="modal fade" id="searchModal" tabindex="-1" aria-labelledby="searchModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="searchModalLabel">Search Items</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="{{ url_for('main.items_list') }}" method="GET">
+                    <div class="modal-body">
+                        <div class="mb-4">
+                            <label for="search-input" class="form-label fw-bold">Search by Item Title</label>
+                            <input type="search" class="form-control" id="search-input" name="search" placeholder="e.g., Old Books, Gaming Headset" autofocus>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <p class="text-muted small mb-2">Or browse popular categories:</p>
+                            <div id="category-suggestions" class="d-flex flex-wrap gap-2">
+                                {% if categories %}
+                                    {% for category in categories %}
+                                        {# FIX: data-bs-dismiss removed, which was preventing navigation. #}
+                                        <a href="{{ url_for('main.items_list', category=category) }}" class="btn btn-sm btn-outline-primary">{{ category }}</a>
+                                    {% endfor %}
+                                {% else %}
+                                    <p class="text-muted">No categories available.</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-search me-2"></i>Search</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
 
     <footer class="text-center py-4 mt-auto border-top">
         <p class="mb-0">&copy; 2025 Sahaayikha. All rights reserved.</p>

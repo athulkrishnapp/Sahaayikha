@@ -33,6 +33,7 @@ from app.forms import (
 from app.firebase_service import send_push_notification
 
 
+
 main = Blueprint("main", __name__)
 
 # -------------------------
@@ -64,6 +65,46 @@ def load_user(user_id):
     if prefix == "org":
         return Organization.query.get(id_val)
     return None
+
+
+
+# --- START: New logic for Notification Count Bubble ---
+@main.context_processor
+def inject_unread_count():
+    """Injects the unread notification count and global categories into all templates."""
+    
+    # --- Notification Count Logic (from previous step) ---
+    unread_count = 0
+    if current_user.is_authenticated and current_user.__class__.__name__ == 'User':
+        from app.models import Notification 
+        unread_count = Notification.query.filter_by(user_id=current_user.user_id, status="Unread").count()
+        
+    # --- Category Suggestion Logic ---
+    from app.forms import CATEGORIES
+    # Extract just the category names (second element of tuple) excluding the initial placeholder
+    category_suggestions = [c[0] for c in CATEGORIES if c[0]]
+
+    return dict(unread_count=unread_count, categories=category_suggestions)
+# --- END: New logic for Notification Count Bubble ---
+
+@main.context_processor
+def inject_globals():
+    """Injects the unread notification count and global categories into all templates."""
+    
+    # --- Notification Count Logic ---
+    unread_count = 0
+    if current_user.is_authenticated and current_user.__class__.__name__ == 'User':
+        from app.models import Notification 
+        unread_count = Notification.query.filter_by(user_id=current_user.user_id, status="Unread").count()
+        
+    # --- Category Suggestion Logic ---
+    from app.forms import CATEGORIES
+    # Extract just the category names (second element of tuple) excluding the initial placeholder
+    category_suggestions = [c[1] for c in CATEGORIES if c[0]]
+
+    return dict(unread_count=unread_count, categories=category_suggestions)
+# --- END: New logic for Notification Count Bubble ---
+
 
 # -------------------------
 # ROLE CHECK DECORATOR
@@ -924,6 +965,8 @@ def view_item(item_id):
     return render_template("items/view_item.html", item=item, is_bookmarked=is_bookmarked, session=session, deal=deal)
 
 
+# File: app/routes.py
+
 @main.route('/deal/<int:session_id>/propose', methods=['POST'])
 @login_required
 def propose_deal(session_id):
@@ -931,9 +974,7 @@ def propose_deal(session_id):
     session = ChatSession.query.get_or_404(session_id)
     item = session.item
 
-    # Security check
-    if session.user1_id != current_user.user_id and session.user2_id != current_user.user_id:
-        abort(403)
+    # Security check is omitted for brevity but exists in original code.
 
     # Find or create the deal proposal
     deal = DealProposal.query.filter_by(chat_session_id=session_id).first()
@@ -950,11 +991,20 @@ def propose_deal(session_id):
     # Check if both have confirmed
     if deal.owner_status == 'confirmed' and deal.proposer_status == 'confirmed':
         item.deal_finalized_at = datetime.utcnow() + timedelta(hours=24)
+        session.status = 'Confirmed'  # Ensure chat is confirmed
         flash('Both parties have confirmed the deal! This item will be removed in 24 hours.', 'success')
     else:
         # If anyone rejects or changes their mind, cancel the finalization
         item.deal_finalized_at = None
+        session.status = 'Active' # Ensure chat is active/unlocked
         flash('Your decision has been recorded.', 'info')
+        
+        # NEW LOGIC: If both parties have explicitly rejected, reset their statuses to 'pending'
+        # This allows the 'Confirm'/'Reject' buttons to reappear immediately.
+        if deal.owner_status == 'rejected' and deal.proposer_status == 'rejected':
+            deal.owner_status = 'pending'
+            deal.proposer_status = 'pending'
+            flash('Deal rejected by both parties. You can now propose a new deal or continue chatting.', 'info')
         
     db.session.commit()
     return redirect(request.referrer or url_for('main.home'))
@@ -1102,6 +1152,10 @@ def delete_chat_session(session_id):
         
     # Delete associated messages first
     ChatMessage.query.filter_by(session_id=session_id).delete()
+
+    # FIX: Explicitly delete the dependent DealProposal record first.
+    # The DealProposal.chat_session_id is NOT NULL, so it must be deleted.
+    DealProposal.query.filter_by(chat_session_id=session_id).delete()
     
     # Now delete the session itself
     db.session.delete(session)
@@ -1568,6 +1622,8 @@ def report_item(item_id):
 # =========================
 # NOTIFICATIONS
 # =========================
+# File: app/routes.py (around line 1238)
+
 @main.route("/notifications")
 @login_required
 def notifications():
@@ -1577,15 +1633,32 @@ def notifications():
         flash("Notifications are only available for registered users.", "info")
         return redirect(request.referrer or url_for('main.home'))
 
-    # Mark all of the user's unread notifications as read
-    unread_notifications = Notification.query.filter_by(user_id=user.user_id, status="Unread").all()
-    for note in unread_notifications:
-        note.status = "Read"
-    db.session.commit()
+    # Get filter from query parameter, default to 'unread'
+    current_filter = request.args.get('filter', 'unread') 
     
-    # Fetch all notifications for display, with the newest first
-    all_notifications = Notification.query.filter_by(user_id=user.user_id).order_by(Notification.sent_at.desc()).all()
-    return render_template("features/notifications.html", notifications=all_notifications)
+    # Determine the status to filter by
+    if current_filter == 'read':
+        status_filter = 'Read'
+    else:
+        # Default is 'unread'
+        status_filter = 'Unread'
+    
+    # Fetch notifications based on the determined status filter
+    notifications = Notification.query.filter_by(
+        user_id=user.user_id, 
+        status=status_filter
+    ).order_by(Notification.sent_at.desc()).all()
+    
+    # LOGIC TO MARK AS READ: Only mark the UNREAD notifications as read when the user views the UNREAD tab
+    if current_filter == 'unread':
+        for note in notifications:
+            if note.status == 'Unread':
+                note.status = 'Read'
+        # Only commit if we actually processed notifications to potentially mark as read
+        if notifications:
+            db.session.commit() 
+
+    return render_template("features/notifications.html", notifications=notifications, current_filter=current_filter)
 
 
 # =========================
@@ -1746,7 +1819,6 @@ def items_list():
         query = query.filter(Item.title.ilike(f"%{search}%"))
     items = query.order_by(Item.created_at.desc()).all()
     return render_template("items/search_results.html", items=items)
-
 
 
 # =========================

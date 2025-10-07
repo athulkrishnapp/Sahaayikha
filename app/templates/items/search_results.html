@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  {% set search_query = request.args.get('search') %}
+  {% set category_query = request.args.get('category') %}
+  
+  {# Determine the title based on search parameters #}
+  {% if search_query %}
+    <h2 class="mb-4">Search Results for: "<span class="fw-bold">{{ search_query }}</span>"</h2>
+  {% elif category_query %}
+    <h2 class="mb-4">Items in Category: <span class="fw-bold">{{ category_query }}</span></h2>
+  {% else %}
+    <h2 class="mb-4">All Items Matching Search Criteria</h2>
+  {% endif %}
+
+  <div class="row g-4">
+    {# Loop through items. The 'else' block handles the case where the list is empty. #}
+    {% for item in items %}
+      <div class="col-md-4">
+        <div class="card shadow h-100">
+          {# Display the first image or a placeholder #}
+          {% if item.images.first() %}
+            <img src="{{ url_for('static', filename=item.images.first().image_url) }}" class="card-img-top" alt="{{ item.title }}">
+          {% else %}
+            <img src="{{ url_for('static', filename='images/item_placeholder.jpg') }}" class="card-img-top" alt="{{ item.title }}">
+          {% endif %}
+          <div class="card-body">
+            <h5 class="card-title">{{ item.title }}</h5>
+            <p class="card-text small text-muted">{{ item.condition }} • {{ item.urgency_level }}</p>
+            <p class="card-text">{{ item.description[:100] }}{% if item.description|length > 100 %}…{% endif %}</p>
+            <a href="{{ url_for('main.view_item', item_id=item.item_id) }}" class="btn btn-outline-primary btn-sm">View</a>
+          </div>
+        </div>
+      </div>
+    {% else %}
+      <div class="col-12">
+        <div class="alert alert-info text-center" role="alert">
+          <i class="fas fa-search-minus me-2"></i> 
+          {% if category_query %}
+            No active posts found in the **{{ category_query }}** category.
+          {% else %}
+            No items match your search criteria.
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
