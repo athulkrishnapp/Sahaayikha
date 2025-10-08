@@ -1532,15 +1532,23 @@ def delete_disaster_need(need_id):
     need = DisasterNeed.query.get_or_404(need_id)
     if need.org_id != current_user.org_id:
         abort(403)
-    
-    # Check if there are any offers associated with this need.
-    if len(need.donation_offers) > 0:
+
+    # Corrected check for active donation offers
+    active_offers = [offer for offer in need.donation_offers if offer.status not in ['Completed', 'Rejected', 'Pickup Failed']]
+    if len(active_offers) > 0:
         flash('Cannot delete a need that has active donation offers. Please resolve offers first.', 'danger')
         return redirect(url_for('main.org_dashboard', filter='needs'))
 
+    # If there are no active offers, proceed with deletion
+    for offer in need.donation_offers:
+        # Delete offered items first
+        for item in offer.offered_items:
+            db.session.delete(item)
+        db.session.delete(offer)
+
     db.session.delete(need)
     db.session.commit()
-    flash('Disaster need has been deleted.', 'success')
+    flash('Disaster need and all associated offers have been deleted.', 'success')
     return redirect(url_for('main.org_dashboard', filter='needs'))
 
 
