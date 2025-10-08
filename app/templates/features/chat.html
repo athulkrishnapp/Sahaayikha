@@ -119,7 +119,48 @@
     .lightbox-close-btn:hover, .lightbox-download-btn:hover {
         background: rgba(0, 0, 0, 0.9);
     }
+    .confirm-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1050;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease, visibility 0s 0.3s;
+    }
 
+    .confirm-modal-overlay.active {
+        opacity: 1;
+        visibility: visible;
+        transition: opacity 0.3s ease;
+    }
+
+    .confirm-modal-box {
+        background: var(--card);
+        padding: 2rem;
+        border-radius: var(--radius);
+        width: 90%;
+        max-width: 400px;
+        transform: scale(0.9);
+        transition: transform 0.3s ease;
+    }
+
+    .confirm-modal-overlay.active .confirm-modal-box {
+        transform: scale(1);
+    }
+
+    .confirm-modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        margin-top: 1.5rem;
+    }
 </style>
 
 <div class="container-fluid p-0">
@@ -201,7 +242,7 @@
         </div>
 
         <div class="chat-form">
-            {% if session.status == 'Active' %}
+            {% if session.status in ['Active', 'Confirmed'] %}
             <form method="POST" enctype="multipart/form-data" id="chatForm">
                 {{ form.hidden_tag() }}
                 <div id="image-preview-container" class="image-preview-container">

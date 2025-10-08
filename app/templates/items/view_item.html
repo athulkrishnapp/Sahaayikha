@@ -136,6 +136,12 @@
 </style>
 
 <div class="container py-5">
+    {% if item.deal_finalized_at %}
+    <div class="alert alert-info text-center" role="alert">
+      <h4 class="alert-heading">Deal Finalized!</h4>
+      <p>This item has been traded and is no longer available.</p>
+    </div>
+    {% endif %}
     <div class="row g-5">
         <div class="col-lg-7">
             {% set images = item.images.all() %}
@@ -177,7 +183,9 @@
                                 <button type="submit" class="btn btn-outline-primary"><i class="far fa-bookmark me-2"></i>Bookmark</button>
                             {% endif %}
                         </form>
+                        {% if not item.deal_finalized_at %}
                         <a href="{{ url_for('main.start_chat', item_id=item.item_id) }}" class="btn btn-primary"><i class="fas fa-comments me-2"></i>Chat with Owner</a>
+                        {% endif %}
                         <a href="{{ url_for('main.report_item', item_id=item.item_id) }}" class="btn btn-outline-danger"><i class="fas fa-flag me-2"></i>Report</a>
                     {% endif %}
                 {% else %}
