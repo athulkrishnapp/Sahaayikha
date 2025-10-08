@@ -6,8 +6,15 @@
         {% for need in needs %}
             <a href="{{ url_for('main.make_donation_offer', need_id=need.need_id) }}" class="list-group-item list-group-item-action flex-column align-items-start">
                 <div class="d-flex w-100 justify-content-between">
-                    <h5 class="mb-1">{{ need.category }}</h5>
+                    <h5 class="mb-1">{{ need.title }}</h5>
                     <small>{{ need.posted_at.strftime('%Y-%m-%d') }}</small>
+                </div>
+                <div class="mb-2">
+                    {% if need.categories %}
+                        {% for category in need.categories.split(',') %}
+                            <span class="badge bg-secondary">{{ category }}</span>
+                        {% endfor %}
+                    {% endif %}
                 </div>
                 <p class="mb-1">{{ need.description }}</p>
                 <small class="text-muted">Requested by: {{ need.organization.name }} in {{ need.location }}</small>

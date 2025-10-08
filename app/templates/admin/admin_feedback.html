@@ -2,6 +2,22 @@
 {% block content %}
 <div class="container py-4">
   <h2 class="mb-4">User Feedback</h2>
+
+  <ul class="nav nav-tabs mb-3">
+    <li class="nav-item">
+        <a class="nav-link {% if current_filter == 'open' %}active{% endif %}" 
+           href="{{ url_for('main.admin_feedbacks', filter='open') }}">
+            Open
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if current_filter == 'responded' %}active{% endif %}" 
+           href="{{ url_for('main.admin_feedbacks', filter='responded') }}">
+            Responded
+        </a>
+    </li>
+  </ul>
+
   <div class="list-group">
     {% for fb in feedbacks %}
       <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
@@ -18,7 +34,7 @@
         </div>
       </div>
     {% else %}
-      <div class="list-group-item text-center text-muted">No feedback submitted yet.</div>
+      <div class="list-group-item text-center text-muted">No feedback in this category.</div>
     {% endfor %}
   </div>
 </div>
