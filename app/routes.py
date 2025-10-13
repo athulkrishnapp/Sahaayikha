@@ -15,7 +15,7 @@ from flask_login import (
 from flask import send_from_directory
 
 from werkzeug.utils import secure_filename
-from sqlalchemy import or_, func
+from sqlalchemy import or_
 
 from app import db, login_manager
 from app.models import (
@@ -261,8 +261,9 @@ def send_disaster_notifications(new_need):
 @main.route("/")
 def home():
     run_scheduled_deletions() # Check for deletions on each home page visit
-    items = Item.query.filter_by(status="Active").order_by(func.random()).limit(7).all()
+    items = Item.query.filter_by(status="Active").order_by(Item.created_at.desc()).limit(8).all()
     return render_template("home.html", title="Home", items=items)
+
 
 # =========================
 # AUTH ROUTES
@@ -521,8 +522,7 @@ def admin_dashboard():
     orgs_count = Organization.query.count()
     items_count = Item.query.count()
     feedback_count = Feedback.query.count()
-    # MODIFIED: Only count pending reports for the dashboard stat
-    reports_count = Report.query.filter_by(status="Pending").count()
+    reports_count = Report.query.count()
     return render_template(
         "dashboard/admin_dashboard.html",
         users_count=users_count,
@@ -567,48 +567,26 @@ def login_logs():
 @login_required
 @role_required("admin")
 def admin_feedbacks():
-    current_filter = request.args.get('filter', 'open')
-    
-    if current_filter == 'responded':
-        status_filter = 'Responded'
-    else:
-        status_filter = 'Open'
-
-    feedbacks = Feedback.query.filter_by(status=status_filter).order_by(Feedback.submitted_at.desc()).all()
-    
-    # Mark open feedbacks as responded when viewed
-    if current_filter == 'open':
-        for fb in feedbacks:
-            fb.status = 'Responded'
-        if feedbacks:
-            db.session.commit()
-
-    return render_template("admin/admin_feedback.html", feedbacks=feedbacks, current_filter=current_filter)
-
+    feedbacks = Feedback.query.order_by(Feedback.submitted_at.desc()).all()
+    return render_template("admin/admin_feedback.html", feedbacks=feedbacks)
 
 @main.route("/admin/reports")
 @login_required
 @role_required("admin")
 def admin_reports():
-    current_filter = request.args.get('filter', 'pending')
+    reports = Report.query.order_by(Report.reported_at.desc()).all()
+    return render_template("admin/admin_reports.html", reports=reports)
 
-    if current_filter == 'resolved':
-        status_filter = 'Resolved'
-    else:
-        status_filter = 'Pending'
 
-    reports = Report.query.filter_by(status=status_filter).order_by(Report.reported_at.desc()).all()
-    
-    # Mark pending reports as 'Viewed' when the admin sees them.
-    # We use 'Viewed' as an intermediate status.
-    if current_filter == 'pending':
-        for r in reports:
-            r.status = 'Viewed'
-        if reports:
-            db.session.commit()
-    
-    # We still show them on this page load, but they won't appear in 'Pending' next time.
-    return render_template("admin/admin_reports.html", reports=reports, current_filter=current_filter)
+@main.route("/admin/reports/<int:report_id>/resolve")
+@login_required
+@role_required("admin")
+def resolve_report(report_id):
+    report = Report.query.get_or_404(report_id)
+    report.status = "Resolved"
+    db.session.commit()
+    flash("Report resolved.", "success")
+    return redirect(url_for("main.admin_reports"))
 
 
 @main.route("/admin/reports/<int:report_id>/delete", methods=["POST"])
@@ -786,6 +764,7 @@ def org_login():
 # -------------------------
 # ORG DASHBOARD
 # -------------------------
+# In app/routes.py
 
 @main.route("/org/dashboard", methods=['GET', 'POST'])
 @login_required
@@ -821,8 +800,7 @@ def org_dashboard():
     if current_filter == 'needs':
         my_items = DisasterNeed.query.filter_by(org_id=org.org_id).order_by(DisasterNeed.posted_at.desc()).all()
     elif current_filter == 'share':
-        # Correctly filter for items posted by the organization
-        all_items = Item.query.filter(Item.status == "Active", Item.type == 'Share', Item.user_id == org.org_id).order_by(Item.created_at.desc()).all()
+        all_items = Item.query.filter(Item.status == "Active", Item.type == 'Share', Item.user_id != org.org_id).order_by(Item.created_at.desc()).all()
     else: # Handle all offer-related filters
         offer_query = DonationOffer.query.filter_by(org_id=org.org_id)
         if current_filter == 'incoming':
@@ -845,6 +823,8 @@ def org_dashboard():
         offers=offers,  # Pass the filtered offers
         form=form
     )
+
+
 
 
 # =========================
@@ -1264,11 +1244,6 @@ def disaster_relief_feed():
 def make_donation_offer(need_id):
     need = DisasterNeed.query.get_or_404(need_id)
     form = DonationOfferForm()
-
-    # Create a list of category choices for the form
-    category_choices = [(c, c) for c in need.categories.split(',')]
-    for item_form in form.offered_items:
-        item_form.category.choices = category_choices
 
     if form.validate_on_submit():
         # --- NEW CUSTOM VALIDATION LOGIC START ---
@@ -1847,13 +1822,7 @@ def chat(session_id):
 @main.route("/items", methods=['GET'])
 def items_list():
     form = SearchForm(request.args)
-    
-    # Start with a base query for active items
     query = Item.query.filter_by(status="Active")
-
-    # Exclude items owned by the current user, if they are logged in
-    if current_user.is_authenticated:
-        query = query.filter(Item.user_id != current_user.user_id)
 
     search = request.args.get('search')
     location = request.args.get('location')
