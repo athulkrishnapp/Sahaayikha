@@ -5,6 +5,7 @@ from wtforms import (
     StringField, PasswordField, SubmitField, TextAreaField,
     SelectField, BooleanField, DateField, FileField, MultipleFileField,
     IntegerField, FormField, SelectMultipleField
+
 )
 from wtforms.validators import DataRequired, Email, EqualTo, Length, Optional, NumberRange
 from flask_wtf.file import FileAllowed
@@ -192,7 +193,8 @@ EXPECTED_RETURN_CHOICES = [
 # -------------------------
 class SearchForm(FlaskForm):
     search = StringField('Search', validators=[Optional()])
-    location = SelectField('Location', choices=[('', 'All Locations')] + KERALA_LOCATIONS, validators=[Optional()])
+    # MODIFICATION: Changed SelectField to SelectMultipleField
+    location = SelectMultipleField('Location', choices=KERALA_LOCATIONS, validators=[Optional()])
     urgency = SelectField('Urgency', choices=[('', 'All Urgencies'), ('Urgent', 'Urgent'), ('Flexible', 'Flexible')], validators=[Optional()])
     condition = SelectField('Condition', choices=[('', 'All Conditions'), ('New', 'New'), ('Used', 'Used'), ('Old', 'Old')], validators=[Optional()])
     sort_by = SelectField('Sort by', choices=[('newest', 'Newest'), ('oldest', 'Oldest')], default='newest', validators=[Optional()])

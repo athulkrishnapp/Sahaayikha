@@ -26,7 +26,7 @@
         {{ form.search(class="form-control", placeholder="Search by title...") }}
       </div>
       <div class="col-md-2">
-        {{ form.location(class="form-select") }}
+        {{ form.location(class="form-select", id="location-select") }}
       </div>
       <div class="col-md-2">
         {{ form.urgency(class="form-select") }}
@@ -74,4 +74,13 @@
     {% endfor %}
   </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    new TomSelect('#location-select', {
+        plugins: ['remove_button'],
+        placeholder: 'Select location(s)...'
+    });
+});
+</script>
 {% endblock %}

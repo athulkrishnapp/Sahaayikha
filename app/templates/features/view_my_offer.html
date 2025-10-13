@@ -150,14 +150,46 @@
                 </div>
             </div>
 
-            {% if offer.status == 'Completed' and offer.proof_image_url %}
-            <div class="card proof-card">
+            {% if offer.status == 'Completed' %}
+            <div class="card proof-card mb-4">
                 <div class="card-header bg-transparent border-0 pt-3">
                     <h5 class="mb-0 fw-bold">Donation Proof</h5>
                 </div>
                 <div class="card-body">
                     <p class="text-muted">The organization has marked this donation as complete. Thank you for your contribution!</p>
-                    <img src="{{ url_for('static', filename=offer.proof_image_url) }}" class="img-fluid rounded border">
+                    {% if offer.proof_image_url %}
+                        <img src="{{ url_for('static', filename=offer.proof_image_url) }}" class="img-fluid rounded border">
+                    {% else %}
+                        <p class="text-center text-muted">Proof of donation image was not provided.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-transparent border-0 pt-3">
+                    <h5 class="mb-0 fw-bold">Items You Donated</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        {% for item in offer.offered_items %}
+                            {% if item.status == 'Accepted' %}
+                                <div class="col-md-4">
+                                    <div class="card h-100">
+                                        {% if item.image_url %}
+                                            <img src="{{ url_for('static', filename=item.image_url) }}" class="card-img-top" alt="{{ item.title }}" style="height: 150px; object-fit: cover;">
+                                        {% else %}
+                                            <div class="card-img-top bg-light d-flex align-items-center justify-content-center" style="height: 150px;">
+                                                <small class="text-muted">No Image</small>
+                                            </div>
+                                        {% endif %}
+                                        <div class="card-body p-2">
+                                            <p class="card-text small mb-0">{{ item.title }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
                 </div>
             </div>
             {% endif %}

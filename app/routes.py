@@ -16,6 +16,8 @@ from flask import send_from_directory
 
 from werkzeug.utils import secure_filename
 from sqlalchemy import or_
+from sqlalchemy import or_, func
+
 
 from app import db, login_manager
 from app.models import (
@@ -1822,18 +1824,26 @@ def chat(session_id):
 @main.route("/items", methods=['GET'])
 def items_list():
     form = SearchForm(request.args)
+    
+    # Start with a base query for active items
     query = Item.query.filter_by(status="Active")
 
+    # Exclude items owned by the current user, if they are logged in
+    if current_user.is_authenticated:
+        query = query.filter(Item.user_id != current_user.user_id)
+
     search = request.args.get('search')
-    location = request.args.get('location')
+    # MODIFICATION: Get a list of locations instead of a single value
+    locations = request.args.getlist('location')
     urgency = request.args.get('urgency')
     condition = request.args.get('condition')
     sort_by = request.args.get('sort_by', 'newest')
 
     if search:
         query = query.filter(Item.title.ilike(f"%{search}%"))
-    if location:
-        query = query.filter_by(location=location)
+    # MODIFICATION: Use 'in_' to filter by multiple locations if they are selected
+    if locations:
+        query = query.filter(Item.location.in_(locations))
     if urgency:
         query = query.filter_by(urgency_level=urgency)
     if condition:
@@ -1847,7 +1857,8 @@ def items_list():
     items = query.all()
 
     form.search.data = search
-    form.location.data = location
+    # MODIFICATION: Set the form's location data to the list of locations
+    form.location.data = locations
     form.urgency.data = urgency
     form.condition.data = condition
     form.sort_by.data = sort_by
