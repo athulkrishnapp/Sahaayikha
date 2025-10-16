@@ -309,6 +309,7 @@ def register():
 @main.route("/verify_otp", methods=["GET", "POST"])
 def verify_otp():
     if 'email' not in session:
+        flash("Session expired. Please register again.", "warning")
         return redirect(url_for('main.register'))
 
     form = OtpForm()
@@ -325,7 +326,31 @@ def verify_otp():
             return redirect(url_for('main.login'))
         else:
             flash('Invalid OTP or OTP has expired.', 'danger')
-    return render_template('auth/verify_otp.html', form=form)
+    
+    # Pass the email to the template for the resend functionality
+    return render_template('auth/verify_otp.html', form=form, email=session.get('email'))
+
+@main.route("/resend_otp", methods=["POST"])
+def resend_otp():
+    email = request.json.get('email')
+    if not email:
+        return jsonify({'success': False, 'error': 'Session expired.'}), 400
+
+    user = User.query.filter_by(email=email).first()
+    if user:
+        otp = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        user.otp = otp
+        user.otp_expiry = datetime.utcnow() + timedelta(minutes=10)
+        db.session.commit()
+        
+        send_email(user.email, 'Your New OTP', f'<h1>Your new OTP is: {otp}</h1>')
+        
+        return jsonify({'success': True, 'message': 'A new OTP has been sent to your email.'})
+    
+    return jsonify({'success': False, 'error': 'User not found.'}), 404
+
+
+
 
 
 @main.route("/login", methods=["GET", "POST"])
@@ -786,6 +811,7 @@ def org_register():
 @main.route("/org/verify_otp", methods=["GET", "POST"])
 def org_verify_otp():
     if 'org_email' not in session:
+        flash("Session expired. Please register your organization again.", "warning")
         return redirect(url_for('main.org_register'))
 
     form = OtpForm()
@@ -801,7 +827,27 @@ def org_verify_otp():
             return redirect(url_for('main.org_login'))
         else:
             flash('Invalid OTP or OTP has expired.', 'danger')
-    return render_template('auth/org_verify_otp.html', form=form)
+            
+    return render_template('auth/org_verify_otp.html', form=form, email=session.get('org_email'))
+
+@main.route("/org/resend_otp", methods=["POST"])
+def org_resend_otp():
+    email = request.json.get('email')
+    if not email:
+        return jsonify({'success': False, 'error': 'Session expired.'}), 400
+
+    org = Organization.query.filter_by(email=email).first()
+    if org:
+        otp = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        org.otp = otp
+        org.otp_expiry = datetime.utcnow() + timedelta(minutes=10)
+        db.session.commit()
+        
+        send_email(org.email, 'Your New Organization OTP', f'<h1>Your new OTP is: {otp}</h1>')
+        
+        return jsonify({'success': True, 'message': 'A new OTP has been sent to your email.'})
+        
+    return jsonify({'success': False, 'error': 'Organization not found.'}), 404
 
 
 @main.route("/org/login", methods=["GET", "POST"])
