@@ -1,0 +1,23 @@
+{# app/templates/auth/verify_otp.html #}
+{% extends "base.html" %}
+{% block content %}
+<div class="container my-5">
+  <div class="row justify-content-center">
+    <div class="col-md-6">
+      <div class="card shadow p-4">
+        <h3 class="text-center mb-4">Verify Your Account</h3>
+        <form method="POST">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            {{ form.otp.label(class="form-label") }}
+            {{ form.otp(class="form-control") }}
+          </div>
+          <div class="d-grid">
+            {{ form.submit(class="btn btn-primary") }}
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

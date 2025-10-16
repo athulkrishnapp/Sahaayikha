@@ -2,6 +2,8 @@ from datetime import datetime, date
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 from app import db
+from itsdangerous import URLSafeTimedSerializer as Serializer
+from flask import current_app
 
 # ---------- USERS ----------
 class User(UserMixin, db.Model):
@@ -17,7 +19,9 @@ class User(UserMixin, db.Model):
     status = db.Column(db.String(50), default="Active")  # Active / Blocked / Deactivated
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     fcm_token = db.Column(db.String(255), nullable=True) # <-- ADD THIS LINE
-
+    otp = db.Column(db.String(6), nullable=True)
+    otp_expiry = db.Column(db.DateTime, nullable=True)
+    is_verified = db.Column(db.Boolean, default=False)
 
 
     # Relationships
@@ -40,6 +44,19 @@ class User(UserMixin, db.Model):
 
     def get_id(self):
         return f"user:{self.user_id}"
+
+    def get_reset_token(self, expires_sec=1800):
+        s = Serializer(current_app.config['SECRET_KEY'])
+        return s.dumps({'user_id': self.user_id})
+
+    @staticmethod
+    def verify_reset_token(token):
+        s = Serializer(current_app.config['SECRET_KEY'])
+        try:
+            user_id = s.loads(token, max_age=1800)['user_id']
+        except:
+            return None
+        return User.query.get(user_id)
 
 
 # ---------- ADMINS ----------
@@ -75,6 +92,11 @@ class Organization(UserMixin, db.Model):
     profile_picture = db.Column(db.String(255), nullable=True)
     status = db.Column(db.String(50), default="Pending")  # Pending / Approved / Blocked
     registered_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # New fields for OTP and verification
+    otp = db.Column(db.String(6), nullable=True)
+    otp_expiry = db.Column(db.DateTime, nullable=True)
+    is_verified = db.Column(db.Boolean, default=False)
 
     # Relationships
     disaster_needs = db.relationship("DisasterNeed", backref="organization", lazy="dynamic")
@@ -87,7 +109,19 @@ class Organization(UserMixin, db.Model):
 
     def get_id(self):
         return f"org:{self.org_id}"
+    
+    def get_reset_token(self, expires_sec=1800):
+        s = Serializer(current_app.config['SECRET_KEY'])
+        return s.dumps({'org_id': self.org_id})
 
+    @staticmethod
+    def verify_reset_token(token):
+        s = Serializer(current_app.config['SECRET_KEY'])
+        try:
+            org_id = s.loads(token, max_age=1800)['org_id']
+        except:
+            return None
+        return Organization.query.get(org_id)
 
 # ---------- LOGIN LOG ----------
 class LoginLog(db.Model):

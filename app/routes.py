@@ -1,23 +1,18 @@
 # app/routes.py
-
 import os
+import random
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import (
     Blueprint, render_template, redirect, url_for,
-    flash, request, abort, jsonify
+    flash, request, abort, jsonify, session
 )
 from flask_login import (
     login_user, logout_user, current_user,
     login_required
 )
-
-from flask import send_from_directory
-
 from werkzeug.utils import secure_filename
 from sqlalchemy import or_
-from sqlalchemy import or_, func
-
 
 from app import db, login_manager
 from app.models import (
@@ -32,12 +27,14 @@ from app.forms import (
     RegistrationForm, OrganizationRegistrationForm, LoginForm,
     ItemForm, FeedbackForm, ReportForm, OrganizationReportForm,
     CategoryFollowForm, DisasterNeedForm, DonationOfferForm, ChatForm,
-    SearchForm
+    SearchForm, OtpForm, ForgotPasswordForm, ResetPasswordForm
 )
+from app.email import send_email
 
 from app.firebase_service import send_push_notification
 
-
+import random
+from flask import session
 
 main = Blueprint("main", __name__)
 
@@ -277,49 +274,62 @@ def register():
 
     form = RegistrationForm()
     if form.validate_on_submit():
-        # Check for duplicate email
         if User.query.filter_by(email=form.email.data).first() or \
            Organization.query.filter_by(email=form.email.data).first() or \
            Admin.query.filter_by(email=form.email.data).first():
             flash("Email already registered.", "danger")
             return render_template("auth/user_register.html", form=form)
 
-        # Save profile picture if uploaded
-        filename = None
-        if form.profile_picture.data:
-            filename = secure_filename(form.profile_picture.data.filename)
-            form.profile_picture.data.save(os.path.join(USER_UPLOAD_FOLDER, filename))
-            filename = f"images/profiles/users/{filename}"
+        otp = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        otp_expiry = datetime.utcnow() + timedelta(minutes=10)
 
-        # Create user
         user = User(
             first_name=form.first_name.data,
             last_name=form.last_name.data,
             email=form.email.data,
             phone=form.phone.data,
             location=form.location.data,
-            profile_picture=filename,
-            status="Active",
-            created_at=datetime.utcnow()
+            status="Pending",
+            otp=otp,
+            otp_expiry=otp_expiry
         )
         user.set_password(form.password.data)
         db.session.add(user)
         db.session.commit()
-        flash("Account created successfully! Please login.", "success")
-        return redirect(url_for("main.login"))
-    else:
-        # WTForms validation errors
-        for field, errors in form.errors.items():
-            for error in errors:
-                flash(f"{getattr(form, field).label.text}: {error}", "danger")
+        
+        send_email(user.email, 'Verify Your Account', f'<h1>Your OTP is: {otp}</h1>')
+        
+        session['email'] = user.email
+        flash("Registration successful! Please check your email for the OTP to verify your account.", "success")
+        return redirect(url_for('main.verify_otp'))
 
     return render_template("auth/user_register.html", form=form)
 
 
+@main.route("/verify_otp", methods=["GET", "POST"])
+def verify_otp():
+    if 'email' not in session:
+        return redirect(url_for('main.register'))
+
+    form = OtpForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(email=session['email']).first()
+        if user and user.otp == form.otp.data and user.otp_expiry > datetime.utcnow():
+            user.is_verified = True
+            user.status = "Active"
+            user.otp = None
+            user.otp_expiry = None
+            db.session.commit()
+            session.pop('email', None)
+            flash('Your account has been verified! Please login.', 'success')
+            return redirect(url_for('main.login'))
+        else:
+            flash('Invalid OTP or OTP has expired.', 'danger')
+    return render_template('auth/verify_otp.html', form=form)
+
 
 @main.route("/login", methods=["GET", "POST"])
 def login():
-    # Only redirect if already logged in as User
     if current_user.is_authenticated and isinstance(current_user._get_current_object(), User):
         return redirect(url_for("main.dashboard"))
 
@@ -327,6 +337,11 @@ def login():
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
         if user and user.check_password(form.password.data):
+            if not user.is_verified:
+                flash('Please verify your account first.', 'warning')
+                session['email'] = user.email
+                return redirect(url_for('main.verify_otp'))
+
             login_user(user, remember=form.remember.data)
             db.session.add(LoginLog(user_id=user.user_id, ip_address=request.remote_addr))
             db.session.commit()
@@ -337,6 +352,40 @@ def login():
 
     return render_template("auth/user_login.html", form=form)
 
+@main.route("/forgot_password", methods=['GET', 'POST'])
+def forgot_password():
+    if current_user.is_authenticated:
+        return redirect(url_for('main.home'))
+    form = ForgotPasswordForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(email=form.email.data).first()
+        if user:
+            token = user.get_reset_token()
+            send_email(user.email, 'Password Reset Request',
+                       f'''<h1>Password Reset Request</h1>
+                           <p>To reset your password, visit the following link:</p>
+                           <p><a href="{url_for('main.reset_token', token=token, _external=True)}">Reset Password</a></p>
+                           <p>If you did not make this request then simply ignore this email and no changes will be made.</p>''')
+        flash('An email has been sent with instructions to reset your password.', 'info')
+        return redirect(url_for('main.login'))
+    return render_template('auth/forgot_password.html', title='Forgot Password', form=form)
+
+
+@main.route("/reset_password/<token>", methods=['GET', 'POST'])
+def reset_token(token):
+    if current_user.is_authenticated:
+        return redirect(url_for('main.home'))
+    user = User.verify_reset_token(token)
+    if user is None:
+        flash('That is an invalid or expired token', 'warning')
+        return redirect(url_for('main.forgot_password'))
+    form = ResetPasswordForm()
+    if form.validate_on_submit():
+        user.set_password(form.password.data)
+        db.session.commit()
+        flash('Your password has been updated! You are now able to log in', 'success')
+        return redirect(url_for('main.login'))
+    return render_template('auth/reset_password.html', title='Reset Password', form=form)
 
 @main.route("/admin/manage_users")
 @login_required
@@ -695,47 +744,64 @@ def update_setting(setting_id):
 # =========================
 @main.route("/org/register", methods=["GET", "POST"])
 def org_register():
-    if current_user.is_authenticated and isinstance(current_user._get_current_object(), Organization):
+    if current_user.is_authenticated:
         return redirect(url_for("main.org_dashboard"))
 
     form = OrganizationRegistrationForm()
     if form.validate_on_submit():
-        # Check for duplicate email
         if Organization.query.filter_by(email=form.email.data).first() or \
            User.query.filter_by(email=form.email.data).first() or \
            Admin.query.filter_by(email=form.email.data).first():
             flash("Email already registered.", "danger")
             return render_template("auth/org_register.html", form=form)
 
-        # Save profile picture if uploaded
-        filename = None
-        if form.profile_picture.data:
-            filename = secure_filename(form.profile_picture.data.filename)
-            form.profile_picture.data.save(os.path.join(ORG_UPLOAD_FOLDER, filename))
-            filename = f"images/profiles/orgs/{filename}"
+        otp = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        otp_expiry = datetime.utcnow() + timedelta(minutes=10)
 
-        # Create organization
         org = Organization(
             name=form.name.data,
             email=form.email.data,
             phone=form.phone.data,
             location=form.location.data,
-            profile_picture=filename,
-            status="Pending",
-            registered_at=datetime.utcnow()
+            status="Pending",  # This status is for admin approval
+            registered_at=datetime.utcnow(),
+            otp=otp,
+            otp_expiry=otp_expiry,
+            is_verified=False # Email not verified yet
         )
         org.set_password(form.password.data)
+
         db.session.add(org)
         db.session.commit()
-        flash("Organization registered successfully! Pending approval.", "success")
-        return redirect(url_for("main.org_login"))
-    else:
-        for field, errors in form.errors.items():
-            for error in errors:
-                flash(f"{getattr(form, field).label.text}: {error}", "danger")
 
+        send_email(org.email, 'Verify Your Organization Account', f'<h1>Your OTP is: {otp}</h1>')
+
+        session['org_email'] = org.email
+        flash("Registration successful! Please check your email for the OTP to verify your account.", "success")
+        return redirect(url_for('main.org_verify_otp'))
+        
     return render_template("auth/org_register.html", form=form)
 
+
+@main.route("/org/verify_otp", methods=["GET", "POST"])
+def org_verify_otp():
+    if 'org_email' not in session:
+        return redirect(url_for('main.org_register'))
+
+    form = OtpForm()
+    if form.validate_on_submit():
+        org = Organization.query.filter_by(email=session['org_email']).first()
+        if org and org.otp == form.otp.data and org.otp_expiry > datetime.utcnow():
+            org.is_verified = True
+            org.otp = None
+            org.otp_expiry = None
+            db.session.commit()
+            session.pop('org_email', None)
+            flash('Your account has been verified! It is now pending administrator approval.', 'success')
+            return redirect(url_for('main.org_login'))
+        else:
+            flash('Invalid OTP or OTP has expired.', 'danger')
+    return render_template('auth/org_verify_otp.html', form=form)
 
 
 @main.route("/org/login", methods=["GET", "POST"])
@@ -747,20 +813,58 @@ def org_login():
     if form.validate_on_submit():
         org = Organization.query.filter_by(email=form.email.data).first()
         if org and org.check_password(form.password.data):
+            if not org.is_verified:
+                flash('Please verify your email with the OTP first.', 'warning')
+                session['org_email'] = org.email
+                return redirect(url_for('main.org_verify_otp'))
+
             if org.status != "Approved":
-                flash("Organization not yet approved.", "warning")
+                flash(f"Your organization's status is '{org.status}'. It must be 'Approved' by an admin to log in.", "warning")
                 return render_template("auth/org_login.html", form=form)
+                
             login_user(org, remember=form.remember.data)
-            # db.session.add(LoginLog(user_id=org.org_id, ip_address=request.remote_addr))
-            # db.session.commit()
             flash("Organization logged in successfully.", "success")
             return redirect(url_for("main.org_dashboard"))
-
 
         flash("Invalid email or password.", "danger")
 
     return render_template("auth/org_login.html", form=form)
 
+
+@main.route("/org/forgot_password", methods=['GET', 'POST'])
+def org_forgot_password():
+    if current_user.is_authenticated:
+        return redirect(url_for('main.home'))
+    form = ForgotPasswordForm()
+    if form.validate_on_submit():
+        org = Organization.query.filter_by(email=form.email.data).first()
+        if org:
+            token = org.get_reset_token()
+            send_email(org.email, 'Password Reset Request',
+                       f'''<h1>Password Reset Request</h1>
+                           <p>To reset your password, visit the following link:</p>
+                           <p><a href="{url_for('main.org_reset_token', token=token, _external=True)}">Reset Password</a></p>
+                           <p>If you did not make this request then simply ignore this email and no changes will be made.</p>''')
+        flash('An email has been sent with instructions to reset your password.', 'info')
+        return redirect(url_for('main.org_login'))
+    return render_template('auth/org_forgot_password.html', title='Forgot Password', form=form)
+
+
+@main.route("/org/reset_password/<token>", methods=['GET', 'POST'])
+def org_reset_token(token):
+    if current_user.is_authenticated:
+        return redirect(url_for('main.home'))
+    org = Organization.verify_reset_token(token)
+    if org is None:
+        flash('That is an invalid or expired token', 'warning')
+        return redirect(url_for('main.org_forgot_password'))
+    form = ResetPasswordForm()
+    if form.validate_on_submit():
+        org.set_password(form.password.data)
+        db.session.commit()
+        flash('Your password has been updated! You are now able to log in', 'success')
+        return redirect(url_for('main.org_login'))
+    return render_template('auth/org_reset_password.html', title='Reset Password', form=form)
 
 
 # -------------------------

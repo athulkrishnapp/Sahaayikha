@@ -1,12 +1,10 @@
 # app/forms.py
 
 from flask_wtf import FlaskForm
-from wtforms import (
-    StringField, PasswordField, SubmitField, TextAreaField,
-    SelectField, BooleanField, DateField, FileField, MultipleFileField,
-    IntegerField, FormField, SelectMultipleField
+from wtforms import StringField, PasswordField, SubmitField, TextAreaField, SelectField, BooleanField, DateField, FileField, MultipleFileField, IntegerField, FormField, SelectMultipleField
+from wtforms.validators import DataRequired, Email, EqualTo, Length, Optional, NumberRange
+from flask_wtf.file import FileAllowed
 
-)
 from wtforms.validators import DataRequired, Email, EqualTo, Length, Optional, NumberRange
 from flask_wtf.file import FileAllowed
 
@@ -231,6 +229,28 @@ class LoginForm(FlaskForm):
     password = PasswordField('Password', validators=[DataRequired()])
     remember = BooleanField('Remember Me')
     submit = SubmitField('Login')
+
+
+
+# -------------------------
+#otp verification & forget pass
+# -------------------------
+
+
+class OtpForm(FlaskForm):
+    otp = StringField('OTP', validators=[DataRequired(), Length(min=6, max=6)])
+    submit = SubmitField('Verify')
+
+class ForgotPasswordForm(FlaskForm):
+    email = StringField('Email', validators=[DataRequired(), Email()])
+    submit = SubmitField('Request Password Reset')
+
+class ResetPasswordForm(FlaskForm):
+    password = PasswordField('New Password', validators=[DataRequired(), Length(min=6)])
+    confirm_password = PasswordField('Confirm New Password', validators=[DataRequired(), EqualTo('password')])
+    submit = SubmitField('Reset Password')
+
+
 
 # -------------------------
 # Item & Trade Forms
