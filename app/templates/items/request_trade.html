@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-5">
+    <h1 class="fw-bold">Request a Trade for: {{ item_to_get.title }}</h1>
+    <p class="text-muted">The owner is looking for an item in the '{{ item_to_get.expected_return }}' category. Here are your items that match:</p>
+
+    <div class="row">
+        <div class="col-md-8">
+            <form method="POST">
+                <div class="list-group">
+                    {% for item in my_items %}
+                    <label class="list-group-item d-flex gap-3">
+                        <input class="form-check-input flex-shrink-0" type="radio" name="item_to_offer" value="{{ item.item_id }}">
+                        <img src="{{ url_for('static', filename=item.images.first().image_url if item.images.first() else 'images/item_placeholder.jpg') }}"
+                            style="width: 100px; height: 100px; object-fit: cover; border-radius: 0.5rem;"
+                            alt="{{ item.title }}">
+                        <span>
+                            <strong class="d-block">{{ item.title }}</strong>
+                            {{ item.description|truncate(100) }}
+                        </span>
+                    </label>
+                    {% else %}
+                    <div class="alert alert-warning">You don't have any items in the '{{ item_to_get.expected_return }}' category to offer.</div>
+                    {% endfor %}
+                </div>
+                {% if my_items %}
+                <div class="d-grid mt-4">
+                    <button type="submit" class="btn btn-primary btn-lg">Send Trade Request</button>
+                </div>
+                {% endif %}
+            </form>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <img src="{{ url_for('static', filename=item_to_get.images.first().image_url if item_to_get.images.first() else 'images/item_placeholder.jpg') }}" class="card-img-top" alt="{{ item_to_get.title }}">
+                <div class="card-body">
+                    <h5 class="card-title">{{ item_to_get.title }}</h5>
+                    <p class="card-text">{{ item_to_get.description|truncate(150) }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -183,8 +183,19 @@
                                 <button type="submit" class="btn btn-outline-primary"><i class="far fa-bookmark me-2"></i>Bookmark</button>
                             {% endif %}
                         </form>
+                        
                         {% if not item.deal_finalized_at %}
-                        <a href="{{ url_for('main.start_chat', item_id=item.item_id) }}" class="btn btn-primary"><i class="fas fa-comments me-2"></i>Chat with Owner</a>
+                            {% if item.expected_return == 'Money' %}
+                                <a href="{{ url_for('main.request_trade', item_id=item.item_id) }}" class="btn btn-success"><i class="fas fa-dollar-sign me-2"></i>Make Offer</a>
+                            {% else %}
+                                {% if trade_request and trade_request.status == 'accepted' %}
+                                    <a href="{{ url_for('main.chat', session_id=session.session_id) }}" class="btn btn-primary"><i class="fas fa-comments me-2"></i>Go to Chat</a>
+                                {% elif trade_request and trade_request.status == 'pending' %}
+                                    <button class="btn btn-secondary" disabled><i class="fas fa-clock me-2"></i>Request Sent</button>
+                                {% else %}
+                                    <a href="{{ url_for('main.request_trade', item_id=item.item_id) }}" class="btn btn-success"><i class="fas fa-exchange-alt me-2"></i>Trade</a>
+                                {% endif %}
+                            {% endif %}
                         {% endif %}
                         <a href="{{ url_for('main.report_item', item_id=item.item_id) }}" class="btn btn-outline-danger"><i class="fas fa-flag me-2"></i>Report</a>
                     {% endif %}
@@ -219,12 +230,48 @@
                         <li><span>Posted On</span> <strong>{{ item.created_at.strftime('%b %d, %Y') }}</strong></li>
                         <li><span>Status</span> <strong>{{ item.status }}</strong></li>
                         <li><span>Item Type</span> <strong>{{ item.type }}</strong></li>
+                        <li><span>Location</span> <strong>{{ item.location or '—' }}</strong></li>
                         <li><span>Expected Return</span> <strong>{{ item.expected_return or '—' }}</strong></li>
                     </ul>
                 </div>
             </div>
         </div>
     </div>
+     {% if current_user.is_authenticated and current_user.user_id == item.user_id %}
+    <div class="row mt-5">
+        <div class="col-12">
+            <h2 class="fw-bold">Trade Requests for Your Item</h2>
+            <div class="list-group">
+                {% for request in item.trade_requests_received %}
+                <div class="list-group-item list-group-item-action">
+                    <div class="d-flex w-100 justify-content-between">
+                        <h5 class="mb-1">{{ request.requester.first_name }} wants to trade!</h5>
+                        <small>{{ request.created_at.strftime('%Y-%m-%d') }}</small>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <img src="{{ url_for('static', filename=request.offered_item.images.first().image_url if request.offered_item.images.first() else 'images/item_placeholder.jpg') }}"
+                            style="width: 100px; height: 100px; object-fit: cover; border-radius: 0.5rem; margin-right: 1rem;"
+                            alt="{{ request.offered_item.title }}">
+                        <p class="mb-1">
+                            They are offering their item: <strong>{{ request.offered_item.title }}</strong>.
+                        </p>
+                    </div>
+                    <div class="mt-2">
+                        <form action="{{ url_for('main.accept_trade', request_id=request.id) }}" method="POST" class="d-inline">
+                            <button type="submit" class="btn btn-success btn-sm">Accept & Chat</button>
+                        </form>
+                        <form action="{{ url_for('main.reject_trade', request_id=request.id) }}" method="POST" class="d-inline">
+                            <button type="submit" class="btn btn-danger btn-sm">Reject</button>
+                        </form>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-muted">No trade requests for this item yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <div class="lightbox" id="lightbox">

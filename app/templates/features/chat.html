@@ -221,13 +221,46 @@
             </div>
 
             <aside class="chat-sidebar">
-                <div class="sidebar-card text-center">
-                    <h6>About Item</h6>
-                    <a href="{{ url_for('main.view_item', item_id=session.item.item_id) }}" class="item-preview text-decoration-none">
-                        <img src="{{ url_for('static', filename=session.item.images.first().image_url if session.item.images.first() else 'images/item_placeholder.jpg') }}">
-                        <p>{{ session.item.title }}</p>
-                    </a>
-                </div>
+                {% if current_user.id == session.item.owner.id %}
+                    <div class="sidebar-card">
+                        <h6>Your Item</h6>
+                        <a href="{{ url_for('main.view_item', item_id=session.item.item_id) }}" class="item-preview text-decoration-none">
+                            <img src="{{ url_for('static', filename=session.item.images.first().image_url if session.item.images.first() else 'images/item_placeholder.jpg') }}">
+                            <p>{{ session.item.title }}</p>
+                        </a>
+                    </div>
+                {% else %}
+                    <div class="sidebar-card">
+                        <h6>Their Item</h6>
+                        <a href="{{ url_for('main.view_item', item_id=session.item.item_id) }}" class="item-preview text-decoration-none">
+                            <img src="{{ url_for('static', filename=session.item.images.first().image_url if session.item.images.first() else 'images/item_placeholder.jpg') }}">
+                            <p>{{ session.item.title }}</p>
+                        </a>
+                    </div>
+                {% endif %}
+
+
+                {% set trade_request = session.item.trade_requests_received.filter_by(requester_id=other_user.user_id).first() or session.item.trade_requests_made.filter_by(owner_id=other_user.user_id).first() %}
+                {% if trade_request and trade_request.status == 'accepted' %}
+                    {% if current_user.id == session.item.owner.id %}
+                         <div class="sidebar-card">
+                            <h6>Their Item</h6>
+                            <a href="{{ url_for('main.view_item', item_id=trade_request.offered_item.item_id) }}" class="item-preview text-decoration-none">
+                                <img src="{{ url_for('static', filename=trade_request.offered_item.images.first().image_url if trade_request.offered_item.images.first() else 'images/item_placeholder.jpg') }}">
+                                <p>{{ trade_request.offered_item.title }}</p>
+                            </a>
+                        </div>
+                    {% else %}
+                        <div class="sidebar-card">
+                            <h6>Your Item</h6>
+                            <a href="{{ url_for('main.view_item', item_id=trade_request.offered_item.item_id) }}" class="item-preview text-decoration-none">
+                                <img src="{{ url_for('static', filename=trade_request.offered_item.images.first().image_url if trade_request.offered_item.images.first() else 'images/item_placeholder.jpg') }}">
+                                <p>{{ trade_request.offered_item.title }}</p>
+                            </a>
+                        </div>
+                    {% endif %}
+                {% endif %}
+
                 <div class="sidebar-card">
                     <h6>Deal Status</h6>
                     {% if session.status == 'Active' %}

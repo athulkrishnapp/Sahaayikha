@@ -156,6 +156,23 @@ class Item(db.Model):
     bookmarks = db.relationship("Bookmark", backref="item", lazy="dynamic")
     reports = db.relationship("Report", backref="item", lazy="dynamic")
     images = db.relationship("ItemImage", backref="item", lazy="dynamic")
+    trade_requests_made = db.relationship('TradeRequest', foreign_keys='TradeRequest.item_offered_id', backref='offered_item', lazy='dynamic')
+    trade_requests_received = db.relationship('TradeRequest', foreign_keys='TradeRequest.item_requested_id', backref='requested_item', lazy='dynamic')
+
+
+class TradeRequest(db.Model):
+    __tablename__ = 'trade_requests'
+    id = db.Column(db.Integer, primary_key=True)
+    item_offered_id = db.Column(db.Integer, db.ForeignKey('items.item_id'), nullable=False)
+    item_requested_id = db.Column(db.Integer, db.ForeignKey('items.item_id'), nullable=False)
+    requester_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
+    status = db.Column(db.String(50), default='pending')  # pending, accepted, rejected
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    requester = db.relationship('User', foreign_keys=[requester_id])
+    owner = db.relationship('User', foreign_keys=[owner_id])
 
 class DealProposal(db.Model):
     __tablename__ = "deal_proposals"

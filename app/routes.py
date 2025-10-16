@@ -1,8 +1,4 @@
 # app/routes.py
-import os
-import random
-from datetime import datetime, timedelta
-from functools import wraps
 from flask import (
     Blueprint, render_template, redirect, url_for,
     flash, request, abort, jsonify, session
@@ -21,7 +17,7 @@ from app.models import (
     ChatSession, ChatMessage, DealProposal,
     DisasterNeed, DonationOffer, OfferedItem,
     Feedback, Report, Bookmark,
-    CategoryFollow, Notification
+    CategoryFollow, Notification, TradeRequest
 )
 from app.forms import (
     RegistrationForm, OrganizationRegistrationForm, LoginForm,
@@ -30,11 +26,12 @@ from app.forms import (
     SearchForm, OtpForm, ForgotPasswordForm, ResetPasswordForm
 )
 from app.email import send_email
-
 from app.firebase_service import send_push_notification
 
 import random
-from flask import session
+from datetime import datetime, timedelta
+from functools import wraps
+import os
 
 main = Blueprint("main", __name__)
 
@@ -1036,6 +1033,124 @@ def dashboard():
         view=view
     )
 
+
+
+# =========================
+# trade session logic
+# =========================
+
+
+@main.route("/trade/request/<int:item_id>", methods=['GET', 'POST'])
+@login_required
+def request_trade(item_id):
+    item_to_get = Item.query.get_or_404(item_id)
+
+    # If the owner wants money, skip the item selection and go straight to chat
+    if item_to_get.expected_return == 'Money':
+        # Find or create a chat session
+        session = ChatSession.query.filter(
+            or_(
+                (ChatSession.user1_id == current_user.user_id) & (ChatSession.user2_id == item_to_get.user_id),
+                (ChatSession.user1_id == item_to_get.user_id) & (ChatSession.user2_id == current_user.user_id)
+            ),
+            ChatSession.item_id == item_id
+        ).first()
+
+        if not session:
+            session = ChatSession(
+                item_id=item_id,
+                user1_id=current_user.user_id,
+                user2_id=item_to_get.user_id
+            )
+            db.session.add(session)
+            db.session.commit()
+        
+        flash("The owner is looking for a monetary offer. You can now chat with them to discuss the price.", "info")
+        return redirect(url_for('main.chat', session_id=session.session_id))
+
+    # --- Existing logic for item-based trades ---
+    if request.method == 'POST':
+        item_to_offer_id = request.form.get('item_to_offer')
+        if not item_to_offer_id:
+            flash("Please select an item to offer.", "warning")
+            return redirect(url_for('main.request_trade', item_id=item_id))
+
+        trade_request = TradeRequest(
+            item_offered_id=item_to_offer_id,
+            item_requested_id=item_id,
+            requester_id=current_user.user_id,
+            owner_id=item_to_get.user_id
+        )
+        db.session.add(trade_request)
+        db.session.commit()
+
+        # Create a notification for the item owner
+        notification_message = f"{current_user.first_name} has requested to trade for your item: {item_to_get.title}"
+        notification = Notification(
+            user_id=item_to_get.user_id,
+            message=notification_message,
+            item_id=item_id  # Link the notification to the requested item
+        )
+        db.session.add(notification)
+        db.session.commit()
+
+        flash("Trade request sent!", "success")
+        return redirect(url_for('main.view_item', item_id=item_id))
+
+    # Get the user's items that match the expected category AND are for trade
+    my_items = Item.query.filter_by(
+        user_id=current_user.user_id,
+        category=item_to_get.expected_return,
+        type='Trade'  # <-- THIS IS THE FIX
+    ).all()
+    
+    return render_template("items/request_trade.html", item_to_get=item_to_get, my_items=my_items)
+
+
+# Add these two new routes
+@main.route('/trade/accept/<int:request_id>', methods=['POST'])
+@login_required
+def accept_trade(request_id):
+    trade_request = TradeRequest.query.get_or_404(request_id)
+    if trade_request.owner_id != current_user.user_id:
+        abort(403)
+
+    trade_request.status = 'accepted'
+
+    # Create a chat session
+    chat_session = ChatSession.query.filter(
+        or_(
+            (ChatSession.user1_id == trade_request.requester_id) & (ChatSession.user2_id == trade_request.owner_id),
+            (ChatSession.user1_id == trade_request.owner_id) & (ChatSession.user2_id == trade_request.requester_id)
+        ),
+        ChatSession.item_id == trade_request.item_requested_id
+    ).first()
+
+    if not chat_session:
+        chat_session = ChatSession(
+            item_id=trade_request.item_requested_id,
+            user1_id=trade_request.requester_id,
+            user2_id=trade_request.owner_id
+        )
+        db.session.add(chat_session)
+
+    db.session.commit()
+    flash("Trade accepted! You can now chat with the other user.", "success")
+    return redirect(url_for('main.chat', session_id=chat_session.session_id))
+
+
+@main.route('/trade/reject/<int:request_id>', methods=['POST'])
+@login_required
+def reject_trade(request_id):
+    trade_request = TradeRequest.query.get_or_404(request_id)
+    if trade_request.owner_id != current_user.user_id:
+        abort(403)
+
+    trade_request.status = 'rejected'
+    db.session.commit()
+    flash("Trade request rejected.", "info")
+    return redirect(url_for('main.view_item', item_id=trade_request.item_requested_id))
+
 # =========================
 # ITEM ROUTES
 # =========================
@@ -1098,13 +1213,14 @@ def view_item(item_id):
     is_bookmarked = False
     session = None
     deal = None
+    trade_request = None 
 
     if current_user.is_authenticated:
         # Check bookmark status
         if Bookmark.query.filter_by(user_id=current_user.user_id, item_id=item.item_id).first():
             is_bookmarked = True
         
-        # Find the chat session and deal proposal between the viewer and the owner
+        # If the viewer is not the owner, find relevant session and trade data
         if item.user_id != current_user.user_id:
             session = ChatSession.query.filter(
                 or_(
@@ -1117,7 +1233,13 @@ def view_item(item_id):
             if session:
                 deal = DealProposal.query.filter_by(chat_session_id=session.session_id).first()
 
-    return render_template("items/view_item.html", item=item, is_bookmarked=is_bookmarked, session=session, deal=deal)
+            # Find any existing trade request from the current user for this item
+            trade_request = TradeRequest.query.filter(
+                TradeRequest.item_requested_id == item.item_id,
+                TradeRequest.requester_id == current_user.user_id
+            ).first()
+
+    return render_template("items/view_item.html", item=item, is_bookmarked=is_bookmarked, session=session, deal=deal, trade_request=trade_request)
 
 
 # File: app/routes.py
@@ -1843,26 +1965,6 @@ def public_profile(user_id):
                       .order_by(Item.created_at.desc()).all()
 
     return render_template("public_profile.html", user=user, items=items)
-
-
-
-# =========================
-# Start CHAT
-# =========================
-
-@main.route("/item/<int:item_id>/chat")
-@login_required
-def start_chat(item_id):
-    item = Item.query.get_or_404(item_id)
-    # Assuming you chat with the item owner
-    other_user_id = item.user_id
-    # Check if session already exists
-    session = ChatSession.query.filter_by(item_id=item_id, user1_id=current_user.user_id, user2_id=other_user_id).first()
-    if not session:
-        session = ChatSession(item_id=item_id, user1_id=current_user.user_id, user2_id=other_user_id)
-        db.session.add(session)
-        db.session.commit()
-    return redirect(url_for("main.chat", session_id=session.session_id))
 
 
 
