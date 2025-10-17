@@ -346,6 +346,10 @@ class Notification(db.Model):
     sent_at = db.Column(db.DateTime, default=datetime.utcnow)
     status = db.Column(db.String(50), default="Unread")  # Read / Unread
 
+    #Relationships
+
+    item = db.relationship("Item", backref="notifications")
+
 
 # ---------- SYSTEM SETTINGS ----------
 class SystemSetting(db.Model):

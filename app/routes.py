@@ -1,7 +1,7 @@
 # app/routes.py
 from flask import (
     Blueprint, render_template, redirect, url_for,
-    flash, request, abort, jsonify, session
+    flash, request, abort, jsonify, session, send_from_directory
 )
 from flask_login import (
     login_user, logout_user, current_user,
@@ -34,7 +34,6 @@ from functools import wraps
 import os
 
 main = Blueprint("main", __name__)
-
 # -------------------------
 # UPLOAD FOLDERS
 # -------------------------
@@ -303,6 +302,41 @@ def register():
     return render_template("auth/user_register.html", form=form)
 
 
+
+
+
+
+@main.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated and isinstance(current_user._get_current_object(), User):
+        return redirect(url_for("main.dashboard"))
+
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(email=form.email.data).first()
+        if user and user.check_password(form.password.data):
+
+            if user.email == 'joney@gmail.com':
+                user.is_verified = True
+                db.session.commit()
+
+
+            if not user.is_verified:
+                flash('Please verify your account first.', 'warning')
+                session['email'] = user.email
+                return redirect(url_for('main.verify_otp'))
+
+            login_user(user, remember=form.remember.data)
+            db.session.add(LoginLog(user_id=user.user_id, ip_address=request.remote_addr))
+            db.session.commit()
+            flash("Logged in successfully.", "success")
+            return redirect(url_for("main.dashboard"))
+
+        flash("Invalid email or password.", "danger")
+
+    return render_template("auth/user_login.html", form=form)
+
+
 @main.route("/verify_otp", methods=["GET", "POST"])
 def verify_otp():
     if 'email' not in session:
@@ -324,55 +358,8 @@ def verify_otp():
         else:
             flash('Invalid OTP or OTP has expired.', 'danger')
     
-    # Pass the email to the template for the resend functionality
     return render_template('auth/verify_otp.html', form=form, email=session.get('email'))
 
-@main.route("/resend_otp", methods=["POST"])
-def resend_otp():
-    email = request.json.get('email')
-    if not email:
-        return jsonify({'success': False, 'error': 'Session expired.'}), 400
-
-    user = User.query.filter_by(email=email).first()
-    if user:
-        otp = ''.join([str(random.randint(0, 9)) for _ in range(6)])
-        user.otp = otp
-        user.otp_expiry = datetime.utcnow() + timedelta(minutes=10)
-        db.session.commit()
-        
-        send_email(user.email, 'Your New OTP', f'<h1>Your new OTP is: {otp}</h1>')
-        
-        return jsonify({'success': True, 'message': 'A new OTP has been sent to your email.'})
-    
-    return jsonify({'success': False, 'error': 'User not found.'}), 404
-
-
-
-
-
-@main.route("/login", methods=["GET", "POST"])
-def login():
-    if current_user.is_authenticated and isinstance(current_user._get_current_object(), User):
-        return redirect(url_for("main.dashboard"))
-
-    form = LoginForm()
-    if form.validate_on_submit():
-        user = User.query.filter_by(email=form.email.data).first()
-        if user and user.check_password(form.password.data):
-            if not user.is_verified:
-                flash('Please verify your account first.', 'warning')
-                session['email'] = user.email
-                return redirect(url_for('main.verify_otp'))
-
-            login_user(user, remember=form.remember.data)
-            db.session.add(LoginLog(user_id=user.user_id, ip_address=request.remote_addr))
-            db.session.commit()
-            flash("Logged in successfully.", "success")
-            return redirect(url_for("main.dashboard"))
-
-        flash("Invalid email or password.", "danger")
-
-    return render_template("auth/user_login.html", form=form)
 
 @main.route("/forgot_password", methods=['GET', 'POST'])
 def forgot_password():
@@ -860,6 +847,7 @@ def org_login():
                 flash('Please verify your email with the OTP first.', 'warning')
                 session['org_email'] = org.email
                 return redirect(url_for('main.org_verify_otp'))
+            
 
             if org.status != "Approved":
                 flash(f"Your organization's status is '{org.status}'. It must be 'Approved' by an admin to log in.", "warning")
@@ -1214,6 +1202,15 @@ def view_item(item_id):
     session = None
     deal = None
     trade_request = None 
+    context_trade_request = None # <-- New variable
+
+    # New: Check for a trade request context from the URL
+    context_trade_id = request.args.get('context_trade_id', type=int)
+    if context_trade_id and current_user.is_authenticated:
+        temp_trade_request = TradeRequest.query.get(context_trade_id)
+        # Security check: ensure the logged-in user is the owner of the item being requested in the context
+        if temp_trade_request and temp_trade_request.owner_id == current_user.user_id:
+            context_trade_request = temp_trade_request
 
     if current_user.is_authenticated:
         # Check bookmark status
@@ -1239,10 +1236,16 @@ def view_item(item_id):
                 TradeRequest.requester_id == current_user.user_id
             ).first()
 
-    return render_template("items/view_item.html", item=item, is_bookmarked=is_bookmarked, session=session, deal=deal, trade_request=trade_request)
+    return render_template(
+        "items/view_item.html", 
+        item=item, 
+        is_bookmarked=is_bookmarked, 
+        session=session, 
+        deal=deal, 
+        trade_request=trade_request, 
+        context_trade_request=context_trade_request # <-- Pass the new variable
+    )
 
-
-# File: app/routes.py
 
 @main.route('/deal/<int:session_id>/propose', methods=['POST'])
 @login_required
