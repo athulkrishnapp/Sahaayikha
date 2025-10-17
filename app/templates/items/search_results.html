@@ -16,17 +16,30 @@
         height: 100%;
         object-fit: cover;
     }
+    
+    #map {
+        height: 600px;
+        width: 100%;
+        border-radius: 0.5rem;
+        border: 1px solid #dee2e6;
+    }
 </style>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+
 <div class="container py-4">
   <h2 class="mb-4">Search Items</h2>
 
   <form method="GET" action="{{ url_for('main.items_list') }}" class="mb-4">
     <div class="row g-2">
-      <div class="col-md-6">
-        {{ form.search(class="form-control", placeholder="Search by title...") }}
+      <div class="col-md-4">
+        {{ form.search(class="form-control", placeholder="Search by title or description...") }}
       </div>
       <div class="col-md-2">
-        {{ form.location(class="form-select", id="location-select") }}
+        {{ form.radius.label(class="form-label") }}
+        {{ form.radius(class="form-select") }}
       </div>
       <div class="col-md-2">
         {{ form.urgency(class="form-select") }}
@@ -35,55 +48,104 @@
         {{ form.condition(class="form-select") }}
       </div>
       <div class="col-md-2">
-        {{ form.sort_by(class="form-select") }}
-      </div>
-      <div class="col-md-2">
         {{ form.submit(class="btn btn-primary w-100") }}
       </div>
     </div>
   </form>
 
-  <div class="row g-4">
-    {# Loop through items. The 'else' block handles the case where the list is empty. #}
-    {% for item in items %}
-      <div class="col-lg-3 col-md-4">
-        <div class="card shadow h-100">
-          {# Display the first image or a placeholder #}
-          <div class="item-card-image-container">
-            {% if item.images.first() %}
-              <img src="{{ url_for('static', filename=item.images.first().image_url) }}" class="item-card-image" alt="{{ item.title }}">
-            {% else %}
-              <img src="{{ url_for('static', filename='images/item_placeholder.jpg') }}" class="item-card-image" alt="{{ item.title }}">
-            {% endif %}
-          </div>
-          <div class="card-body">
-            <h5 class="card-title">{{ item.title }}</h5>
-            <p class="card-text small text-muted">{{ item.condition }} • {{ item.urgency_level }} • <i class="fas fa-map-marker-alt fa-fw"></i> {{ item.location }}</p>
-            <p class="card-text">{{ item.description[:50] }}{% if item.description|length > 50 %}…{% endif %}</p>
-            <a href="{{ url_for('main.view_item', item_id=item.item_id) }}" class="btn btn-outline-primary btn-sm">View</a>
-            {% if item.type == 'Trade' %}
-            <a href="{{ url_for('main.request_trade', item_id=item.item_id) }}" class="btn btn-outline-success btn-sm">Trade</a>
-            {% endif %}
-          </div>
-        </div>
-      </div>
-    {% else %}
-      <div class="col-12">
-        <div class="alert alert-info text-center" role="alert">
-          <i class="fas fa-search-minus me-2"></i> 
-          No items match your search criteria.
-        </div>
-      </div>
-    {% endfor %}
+  <div class="d-flex justify-content-end mb-3">
+    <div class="btn-group" role="group">
+      <button type="button" class="btn btn-outline-primary active" id="grid-view-btn"><i class="fas fa-th-large"></i> Grid</button>
+      <button type="button" class="btn btn-outline-primary" id="map-view-btn"><i class="fas fa-map-marked-alt"></i> Map</button>
+    </div>
   </div>
-</div>
+
+  <div id="grid-view">
+      <div class="row g-4">
+        {% for item in items %}
+          <div class="col-lg-3 col-md-4">
+            <div class="card shadow h-100">
+              <div class="item-card-image-container">
+                {% if item.images.first() %}
+                  <img src="{{ url_for('static', filename=item.images.first().image_url) }}" class="item-card-image" alt="{{ item.title }}">
+                {% else %}
+                  <img src="{{ url_for('static', filename='images/item_placeholder.jpg') }}" class="item-card-image" alt="{{ item.title }}">
+                {% endif %}
+              </div>
+              <div class="card-body">
+                <h5 class="card-title">{{ item.title }}</h5>
+                <p class="card-text small text-muted">{{ item.condition }} • {{ item.urgency_level }} • <i class="fas fa-map-marker-alt fa-fw"></i> {{ item.location }}</p>
+                <a href="{{ url_for('main.view_item', item_id=item.item_id) }}" class="btn btn-outline-primary btn-sm">View</a>
+              </div>
+            </div>
+          </div>
+        {% else %}
+          <div class="col-12">
+            <div class="alert alert-info text-center" role="alert">
+              <i class="fas fa-search-minus me-2"></i> 
+              No items match your search criteria.
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+  </div>
+
+  <div id="map-view" style="display: none;">
+      <div id="map"></div>
+  </div>
+
+  <div id="map-data" data-items="{{ items_json|safe }}"></div>
+  </div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
 
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-    new TomSelect('#location-select', {
-        plugins: ['remove_button'],
-        placeholder: 'Select location(s)...'
+    document.addEventListener('DOMContentLoaded', function () {
+        const gridView = document.getElementById('grid-view');
+        const mapView = document.getElementById('map-view');
+        const gridViewBtn = document.getElementById('grid-view-btn');
+        const mapViewBtn = document.getElementById('map-view-btn');
+
+        let map;
+
+        // **FIX START**: Read data from the HTML data attribute
+        const mapDataElement = document.getElementById('map-data');
+        const mapItems = JSON.parse(mapDataElement.dataset.items);
+        // **FIX END**
+
+        function initializeMap() {
+            if (map) return;
+
+            map = L.map('map').setView([10.8505, 76.2711], 7);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            mapItems.forEach(item => {
+                if (item.latitude && item.longitude) {
+                    const marker = L.marker([item.latitude, item.longitude]).addTo(map);
+                    marker.bindPopup(`<b>${item.title}</b><br><a href="/item/${item.item_id}">View Details</a>`);
+                }
+            });
+        }
+
+        gridViewBtn.addEventListener('click', () => {
+            gridView.style.display = 'block';
+            mapView.style.display = 'none';
+            gridViewBtn.classList.add('active');
+            mapViewBtn.classList.remove('active');
+        });
+
+        mapViewBtn.addEventListener('click', () => {
+            gridView.style.display = 'none';
+            mapView.style.display = 'block';
+            mapViewBtn.classList.add('active');
+            gridViewBtn.classList.remove('active');
+            initializeMap();
+        });
     });
-});
 </script>
 {% endblock %}

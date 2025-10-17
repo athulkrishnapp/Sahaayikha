@@ -191,8 +191,11 @@ EXPECTED_RETURN_CHOICES = [
 # -------------------------
 class SearchForm(FlaskForm):
     search = StringField('Search', validators=[Optional()])
-    # MODIFICATION: Changed SelectField to SelectMultipleField
     location = SelectMultipleField('Location', choices=KERALA_LOCATIONS, validators=[Optional()])
+    radius = SelectField('Radius', 
+                         choices=[('5', '5 km'), ('10', '10 km'), ('20', '20 km'), ('50', '50 km'), ('100', '100+ km')],
+                         default='20', 
+                         validators=[Optional()])
     urgency = SelectField('Urgency', choices=[('', 'All Urgencies'), ('Urgent', 'Urgent'), ('Flexible', 'Flexible')], validators=[Optional()])
     condition = SelectField('Condition', choices=[('', 'All Conditions'), ('New', 'New'), ('Used', 'Used'), ('Old', 'Old')], validators=[Optional()])
     sort_by = SelectField('Sort by', choices=[('newest', 'Newest'), ('oldest', 'Oldest')], default='newest', validators=[Optional()])
@@ -210,6 +213,10 @@ class RegistrationForm(FlaskForm):
     phone = StringField('Phone', validators=[Optional(), Length(max=50)])
     location = SelectField('Location', choices=KERALA_LOCATIONS, validators=[DataRequired()])
     profile_picture = FileField('Profile Picture', validators=[Optional(), FileAllowed(['jpg', 'png', 'jpeg'])])
+    search_radius = SelectField('Default Search Radius', 
+                                choices=[('5', '5 km'), ('10', '10 km'), ('20', '20 km'), ('50', '50 km'), ('100', '100+ km')], 
+                                default='20', 
+                                validators=[DataRequired()])
     submit = SubmitField('Register')
 
 

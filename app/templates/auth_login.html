@@ -48,6 +48,15 @@
         gap: 25px;
         margin-bottom: 30px;
     }
+    
+    /* NEW: Style for when there are only two columns */
+    .roles-grid.two-cols {
+        grid-template-columns: repeat(2, 1fr);
+        max-width: 550px; /* Center the two cards nicely */
+        margin-left: auto;
+        margin-right: auto;
+    }
+
 
     .role-card {
         background: rgba(248, 249, 250, 0.7);
@@ -59,13 +68,11 @@
         transition: all 0.3s ease;
     }
     
-    /* This rule lifts ALL cards on hover */
     .role-card:hover {
         transform: translateY(-10px);
         box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
     }
     
-    /* This rule gives the middle card a DIFFERENT shadow color on hover */
     .role-card.middle-card:hover {
         box-shadow: 0 10px 20px rgba(86, 61, 124, 0.15);
     }
@@ -142,7 +149,8 @@
         <h1>Welcome Back</h1>
         <p>Select your role to continue to your personalized dashboard</p>
 
-        <div class="roles-grid">
+        <!-- The grid now conditionally gets a 'two-cols' class -->
+        <div class="roles-grid {% if not request.args.get('role') == 'admin' %}two-cols{% endif %}">
             <a href="{{ url_for('main.login') }}" class="role-card">
                 <i class="fas fa-user-circle"></i>
                 <h3>User Login</h3>
@@ -155,11 +163,14 @@
                 <span>Manage your organization and team members</span>
             </a>
 
+            <!-- This block is now conditional -->
+            {% if request.args.get('role') == 'admin' %}
             <a href="{{ url_for('main.admin_login') }}" class="role-card">
                 <i class="fas fa-user-shield"></i>
                 <h3>Admin Panel</h3>
                 <span>System administration and management</span>
             </a>
+            {% endif %}
         </div>
 
         <p class="register-link">

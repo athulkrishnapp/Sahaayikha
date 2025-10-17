@@ -29,6 +29,8 @@ from app.forms import (
 from app.email import send_email
 from app.firebase_service import send_push_notification
 
+from app.utils import geocode_location, haversine_distance
+
 import random
 from datetime import datetime, timedelta
 from functools import wraps
@@ -272,14 +274,14 @@ def register():
 
     form = RegistrationForm()
     if form.validate_on_submit():
-        if User.query.filter_by(email=form.email.data).first() or \
-           Organization.query.filter_by(email=form.email.data).first() or \
-           Admin.query.filter_by(email=form.email.data).first():
+        if User.query.filter_by(email=form.email.data).first():
             flash("Email already registered.", "danger")
             return render_template("auth/user_register.html", form=form)
 
         otp = ''.join([str(random.randint(0, 9)) for _ in range(6)])
         otp_expiry = datetime.utcnow() + timedelta(minutes=10)
+
+        lat, lon = geocode_location(form.location.data)
 
         user = User(
             first_name=form.first_name.data,
@@ -289,7 +291,10 @@ def register():
             location=form.location.data,
             status="Pending",
             otp=otp,
-            otp_expiry=otp_expiry
+            otp_expiry=otp_expiry,
+            latitude=lat,
+            longitude=lon,
+            search_radius=int(form.search_radius.data)
         )
         user.set_password(form.password.data)
         db.session.add(user)
@@ -491,10 +496,16 @@ def profile():
         if isinstance(user, User):
             user.first_name = form.first_name.data
             user.last_name = form.last_name.data
+            user.search_radius = int(form.search_radius.data)
         else: 
             user.name = form.name.data
         user.phone = form.phone.data
-        user.location = form.location.data
+        
+        if user.location != form.location.data:
+            user.location = form.location.data
+            lat, lon = geocode_location(form.location.data)
+            user.latitude = lat
+            user.longitude = lon
         if form.profile_picture.data:
             filename = secure_filename(form.profile_picture.data.filename)
             folder = USER_UPLOAD_FOLDER if isinstance(user, User) else ORG_UPLOAD_FOLDER
@@ -1159,7 +1170,7 @@ def reject_trade(request_id):
 def new_item():
     form = ItemForm()
     if form.validate_on_submit():
-        # ... (Your existing code to create and save the item)
+        lat, lon = geocode_location(getattr(current_user, "location", None))
         item = Item(
             title=form.title.data,
             description=form.description.data,
@@ -1172,7 +1183,8 @@ def new_item():
             status="Active",
             created_at=datetime.utcnow(),
             user_id=getattr(current_user, "user_id", None),
-            expires_at=None
+            latitude=lat,
+            longitude=lon
         )
         db.session.add(item)
         db.session.commit()
@@ -1204,7 +1216,6 @@ def new_item():
         flash("Item posted successfully.", "success")
         return redirect(url_for("main.dashboard"))
     return render_template("items/post_item.html", form=form)
-
 
 
 @main.route("/item/<int:item_id>")
@@ -2194,26 +2205,20 @@ def chat(session_id):
 @main.route("/items", methods=['GET'])
 def items_list():
     form = SearchForm(request.args)
-    
-    # Start with a base query for active items
     query = Item.query.filter_by(status="Active")
 
-    # Exclude items owned by the current user, if they are logged in
     if current_user.is_authenticated:
         query = query.filter(Item.user_id != current_user.user_id)
 
     search = request.args.get('search')
-    # MODIFICATION: Get a list of locations instead of a single value
-    locations = request.args.getlist('location')
+    radius = request.args.get('radius', type=int)
     urgency = request.args.get('urgency')
     condition = request.args.get('condition')
     sort_by = request.args.get('sort_by', 'newest')
 
     if search:
-        query = query.filter(Item.title.ilike(f"%{search}%"))
-    # MODIFICATION: Use 'in_' to filter by multiple locations if they are selected
-    if locations:
-        query = query.filter(Item.location.in_(locations))
+        query = query.filter(or_(Item.title.ilike(f"%{search}%"), Item.description.ilike(f"%{search}%")))
+
     if urgency:
         query = query.filter_by(urgency_level=urgency)
     if condition:
@@ -2224,17 +2229,46 @@ def items_list():
     else:
         query = query.order_by(Item.created_at.desc())
     
-    items = query.all()
+    all_items = query.all()
+    filtered_items = []
+
+    if current_user.is_authenticated and current_user.latitude is not None:
+        user_lat = current_user.latitude
+        user_lon = current_user.longitude
+        search_radius = radius if radius is not None else current_user.search_radius
+
+        for item in all_items:
+            if item.latitude is not None:
+                distance = haversine_distance(user_lat, user_lon, item.latitude, item.longitude)
+                if distance <= search_radius:
+                    filtered_items.append(item)
+    else:
+        filtered_items = all_items
+        
+    # --- NEW CODE START ---
+    # Create a simple list of dictionaries that is JSON-safe
+    items_for_map = [
+        {
+            "item_id": item.item_id,
+            "title": item.title,
+            "latitude": item.latitude,
+            "longitude": item.longitude
+        } 
+        for item in filtered_items if item.latitude and item.longitude
+    ]
+    # Convert the list to a JSON string
+    items_json = json.dumps(items_for_map)
+    # --- NEW CODE END ---
 
     form.search.data = search
-    # MODIFICATION: Set the form's location data to the list of locations
-    form.location.data = locations
     form.urgency.data = urgency
     form.condition.data = condition
     form.sort_by.data = sort_by
+    if radius:
+        form.radius.data = str(radius)
 
-    return render_template("items/search_results.html", items=items, form=form)
-
+    # Pass both the original items and the new JSON string to the template
+    return render_template("items/search_results.html", items=filtered_items, form=form, items_json=items_json)
 
 # =========================
 # notification delete and org report

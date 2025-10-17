@@ -26,6 +26,10 @@ class User(UserMixin, db.Model):
     otp = db.Column(db.String(6), nullable=True)
     otp_expiry = db.Column(db.DateTime, nullable=True)
     is_verified = db.Column(db.Boolean, default=False)
+    # New fields for location-based search
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
+    search_radius = db.Column(db.Integer, default=20) # Default search radius of 20 km
 
     items = db.relationship("Item", backref="owner", lazy="dynamic")
     bookmarks = db.relationship("Bookmark", backref="user", lazy="dynamic")
@@ -159,6 +163,9 @@ class Item(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     expires_at = db.Column(db.DateTime, nullable=True)
     deal_finalized_at = db.Column(db.DateTime, nullable=True)
+    # New fields for location-based search
+    latitude = db.Column(db.Float, nullable=True)
+    longitude = db.Column(db.Float, nullable=True)
 
     histories = db.relationship("ItemHistory", backref="item", lazy="dynamic")
     bookmarks = db.relationship("Bookmark", backref="item", lazy="dynamic")
@@ -167,7 +174,6 @@ class Item(db.Model):
     trade_requests_made = db.relationship('TradeRequest', foreign_keys='TradeRequest.item_offered_id', backref='offered_item', lazy='dynamic')
     trade_requests_received = db.relationship('TradeRequest', foreign_keys='TradeRequest.item_requested_id', backref='requested_item', lazy='dynamic')
     
-    # Corrected relationship
     chat_sessions = db.relationship("ChatSession", back_populates="trade_item", foreign_keys="ChatSession.trade_item_id")
 
 
