@@ -133,8 +133,6 @@ class Organization(UserMixin, db.Model):
             return None
         return Organization.query.get(org_id)
 
-# ... (rest of the models remain the same)
-
 # ---------- LOGIN LOG ----------
 class LoginLog(db.Model):
     __tablename__ = "login_logs"
@@ -163,12 +161,14 @@ class Item(db.Model):
     deal_finalized_at = db.Column(db.DateTime, nullable=True)
 
     histories = db.relationship("ItemHistory", backref="item", lazy="dynamic")
-    chat_sessions = db.relationship("ChatSession", backref="item", lazy="dynamic")
     bookmarks = db.relationship("Bookmark", backref="item", lazy="dynamic")
     reports = db.relationship("Report", backref="item", lazy="dynamic")
-    images = db.relationship("ItemImage", backref="item", lazy="dynamic")
+    images = db.relationship("ItemImage", backref="item", lazy="dynamic", cascade="all, delete-orphan")
     trade_requests_made = db.relationship('TradeRequest', foreign_keys='TradeRequest.item_offered_id', backref='offered_item', lazy='dynamic')
     trade_requests_received = db.relationship('TradeRequest', foreign_keys='TradeRequest.item_requested_id', backref='requested_item', lazy='dynamic')
+    
+    # Corrected relationship
+    chat_sessions = db.relationship("ChatSession", back_populates="trade_item", foreign_keys="ChatSession.trade_item_id")
 
 
 class TradeRequest(db.Model):
@@ -183,6 +183,7 @@ class TradeRequest(db.Model):
 
     requester = db.relationship('User', foreign_keys=[requester_id])
     owner = db.relationship('User', foreign_keys=[owner_id])
+
 
 class DealProposal(db.Model):
     __tablename__ = "deal_proposals"
@@ -220,7 +221,9 @@ class ItemHistory(db.Model):
 class ChatSession(db.Model):
     __tablename__ = "chat_sessions"
     session_id = db.Column(db.Integer, primary_key=True)
-    item_id = db.Column(db.Integer, db.ForeignKey("items.item_id"), nullable=False)
+    
+    trade_item_id = db.Column(db.Integer, db.ForeignKey("items.item_id"), nullable=True)
+    disaster_need_id = db.Column(db.Integer, db.ForeignKey("disaster_needs.need_id"), nullable=True)
     
     user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
     org_id = db.Column(db.Integer, db.ForeignKey("organizations.org_id"), nullable=True)
@@ -229,19 +232,28 @@ class ChatSession(db.Model):
     status = db.Column(db.String(50), default="Active")
     started_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    messages = db.relationship("ChatMessage", backref="session", lazy="dynamic")
+    messages = db.relationship("ChatMessage", backref="session", lazy="dynamic", cascade="all, delete-orphan")
     user = db.relationship("User", foreign_keys=[user_id])
     other_user = db.relationship("User", foreign_keys=[other_user_id])
     organization = db.relationship("Organization", foreign_keys=[org_id])
 
+    trade_item = db.relationship("Item", back_populates="chat_sessions", foreign_keys=[trade_item_id])
+    disaster_need = db.relationship("DisasterNeed", back_populates="chat_sessions", foreign_keys=[disaster_need_id])
+
     __table_args__ = (
         db.CheckConstraint('(org_id IS NOT NULL AND other_user_id IS NULL) OR (org_id IS NULL AND other_user_id IS NOT NULL)', name='chk_participant'),
+        db.CheckConstraint('(trade_item_id IS NOT NULL AND disaster_need_id IS NULL) OR (trade_item_id IS NULL AND disaster_need_id IS NOT NULL)', name='chk_chat_subject'),
     )
+
+    @property
+    def subject(self):
+        return self.trade_item or self.disaster_need
 
 
 class ChatMessage(db.Model):
     __tablename__ = "chat_messages"
     
+    # THE FIX IS ON THE NEXT LINE
     message_id = db.Column(db.Integer, primary_key=True)
     session_id = db.Column(db.Integer, db.ForeignKey("chat_sessions.session_id"), nullable=False)
     sender_type = db.Column(db.String(50), nullable=False)
@@ -249,7 +261,9 @@ class ChatMessage(db.Model):
     message = db.Column(db.Text, nullable=True)
     image_url = db.Column(db.String(255), nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    is_read = db.Column(db.Boolean, default=False, nullable=False)
     deleted_at = db.Column(db.DateTime, nullable=True)
+
 
 
 # ---------- DISASTER NEEDS ----------
@@ -262,6 +276,9 @@ class DisasterNeed(db.Model):
     description = db.Column(db.Text, nullable=False)
     location = db.Column(db.String(255))
     posted_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Corrected relationship
+    chat_sessions = db.relationship("ChatSession", back_populates="disaster_need", foreign_keys="ChatSession.disaster_need_id")
 
 
 # ---------- DISASTER DONATIONS ----------

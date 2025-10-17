@@ -131,7 +131,7 @@
                     <img src="{{ url_for('static', filename=other_user.profile_picture or 'images/users_placeholder.png') }}" alt="{{ other_user.first_name }}" class="chat-header-img">
                     <div class="chat-header-info">
                         <h5>{{ other_user.first_name }} {{ other_user.last_name }}</h5>
-                        <p>Discussing: {{ session.item.title }}</p>
+                        <p>Discussing: {{ the_item.title }}</p>
                     </div>
                 </a>
             {% elif organization %}
@@ -139,13 +139,15 @@
                     <img src="{{ url_for('static', filename=organization.profile_picture or 'images/orgs_placeholder.png') }}" alt="{{ organization.name }}" class="chat-header-img">
                     <div class="chat-header-info">
                         <h5>{{ organization.name }}</h5>
-                        <p>Discussing: {{ session.item.title }}</p>
+                        <p>Discussing: {{ the_item.title }}</p>
                     </div>
                 </div>
             {% endif %}
 
             <div class="ms-auto d-flex align-items-center">
-                <a href="{{ url_for('main.view_item', item_id=session.item.item_id) }}" class="btn btn-sm btn-outline-secondary">View Item</a>
+                {% if not session.org_id and the_item.item_id != 0 %}
+                    <a href="{{ url_for('main.view_item', item_id=the_item.item_id) }}" class="btn btn-sm btn-outline-secondary">View Item</a>
+                {% endif %}
                 <div class="dropdown ms-2">
                     <button class="btn btn-sm rounded-circle header-action-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="width:32px; height:32px;" title="More Options">
                         <i class="fas fa-ellipsis-v"></i>
@@ -193,33 +195,41 @@
 
             <aside class="chat-sidebar">
                 
-                {% set trade_request = session.item.trade_requests_received.filter_by(requester_id=other_user.user_id).first() if other_user else none %}
+                {% if not session.org_id %}
+                    {% set trade_request = the_item.trade_requests_received.filter_by(requester_id=other_user.user_id).first() if other_user else none %}
 
-                <div class="sidebar-card">
-                    <div class="item-preview-tabs">
-                        <div class="item-preview-tab active" data-target="item-for-trade">Item for Trade</div>
+                    <div class="sidebar-card">
+                        <div class="item-preview-tabs">
+                            <div class="item-preview-tab active" data-target="item-for-trade">Item for Trade</div>
+                            {% if trade_request and trade_request.status == 'accepted' %}
+                            <div class="item-preview-tab" data-target="item-offered">Offered Item</div>
+                            {% endif %}
+                        </div>
+
+                        <div id="item-for-trade" class="item-preview-content active">
+                            <a href="{{ url_for('main.view_item', item_id=the_item.item_id) }}" class="item-preview text-decoration-none">
+                                <img src="{{ url_for('static', filename=the_item.images.first().image_url if the_item.images.first() else 'images/item_placeholder.jpg') }}">
+                                <p>{{ the_item.title }}</p>
+                            </a>
+                        </div>
+
                         {% if trade_request and trade_request.status == 'accepted' %}
-                        <div class="item-preview-tab" data-target="item-offered">Offered Item</div>
+                        <div id="item-offered" class="item-preview-content">
+                            <a href="{{ url_for('main.view_item', item_id=trade_request.offered_item.item_id) }}" class="item-preview text-decoration-none">
+                                <img src="{{ url_for('static', filename=trade_request.offered_item.images.first().image_url if trade_request.offered_item.images.first() else 'images/item_placeholder.jpg') }}">
+                                <p>{{ trade_request.offered_item.title }}</p>
+                            </a>
+                        </div>
                         {% endif %}
                     </div>
-
-                    <div id="item-for-trade" class="item-preview-content active">
-                        <a href="{{ url_for('main.view_item', item_id=session.item.item_id) }}" class="item-preview text-decoration-none">
-                            <img src="{{ url_for('static', filename=session.item.images.first().image_url if session.item.images.first() else 'images/item_placeholder.jpg') }}">
-                            <p>{{ session.item.title }}</p>
-                        </a>
+                {% else %}
+                    <div class="sidebar-card">
+                        <h6>About this Conversation</h6>
+                        <p class="small text-muted">This chat is regarding the disaster need post: <strong>{{ the_item.title }}</strong>.</p>
                     </div>
-
-                    {% if trade_request and trade_request.status == 'accepted' %}
-                    <div id="item-offered" class="item-preview-content">
-                        <a href="{{ url_for('main.view_item', item_id=trade_request.offered_item.item_id) }}" class="item-preview text-decoration-none">
-                            <img src="{{ url_for('static', filename=trade_request.offered_item.images.first().image_url if trade_request.offered_item.images.first() else 'images/item_placeholder.jpg') }}">
-                            <p>{{ trade_request.offered_item.title }}</p>
-                        </a>
-                    </div>
-                    {% endif %}
-                </div>
+                {% endif %}
                 
+                {% if not session.org_id %}
                 <div class="sidebar-card">
                     <h6>Deal Status</h6>
                     {% if session.status == 'Active' %}
@@ -230,6 +240,7 @@
                         <div class="alert alert-danger text-center"><i class="fas fa-ban me-2"></i>Chat Blocked</div>
                     {% endif %}
                 </div>
+                {% endif %}
             </aside>
         </div>
 

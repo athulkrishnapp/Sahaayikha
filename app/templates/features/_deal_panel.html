@@ -104,7 +104,7 @@
 </style>
 
 {% set owner = session.item.owner %}
-{% set proposer = session.user1 if session.item.owner.user_id == session.user2_id else session.user2 %}
+{% set proposer = session.other_user if session.user_id == owner.user_id else session.user %}
 {% set owner_status = deal.owner_status if deal else 'pending' %}
 {% set proposer_status = deal.proposer_status if deal else 'pending' %}
 
@@ -112,17 +112,14 @@
     <h6>Deal Status</h6>
     <div class="deal-status-bar-modern">
         <div class="deal-status-line">
-            <!-- Owner half progress -->
             <div class="deal-status-progress progress-owner"
                  style="--progress: {{ '50%' if owner_status == 'confirmed' else '0%' }};">
             </div>
-            <!-- Proposer half progress -->
             <div class="deal-status-progress progress-proposer"
                  style="--progress: {{ '50%' if proposer_status == 'confirmed' else '0%' }};">
             </div>
         </div>
 
-        <!-- Owner node -->
         <div class="deal-status-node status-{{ owner_status }}">
             <img src="{{ url_for('static', filename=owner.profile_picture or 'images/users_placeholder.png') }}" 
                  class="deal-user-avatar">
@@ -138,7 +135,6 @@
             </div>
         </div>
 
-        <!-- Proposer node -->
         <div class="deal-status-node status-{{ proposer_status }}">
             <img src="{{ url_for('static', filename=proposer.profile_picture or 'images/users_placeholder.png') }}" 
                  class="deal-user-avatar">

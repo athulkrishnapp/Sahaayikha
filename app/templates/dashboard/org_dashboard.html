@@ -145,6 +145,12 @@
                 <p>Manage your organization's activities and contributions.</p>
             </div>
             <div class="header-actions">
+                <a href="{{ url_for('main.org_dashboard', filter='chats') }}" class="btn-dashboard btn-outline-dashboard position-relative" title="Chats">
+                    <i class="fas fa-comments"></i>
+                    {% if has_unread_chats %}
+                        <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger border border-light rounded-circle"></span>
+                    {% endif %}
+                </a>
                 <a href="{{ url_for('main.profile') }}" class="btn-dashboard btn-outline-dashboard" title="My Profile"><i class="fas fa-user"></i></a>
             </div>
         </div>
@@ -152,7 +158,6 @@
 </header>
 
 <main class="dashboard-container">
-
     <section class="section">
         {% set current_filter = request.args.get('filter', 'needs') %}
         <div class="quick-filters">
@@ -162,128 +167,15 @@
             <a href="{{ url_for('main.org_dashboard', filter='pending_donation') }}" class="filter-btn {{ 'active' if current_filter == 'pending_donation' }}"><i class="fas fa-hourglass-half"></i> Donation Pending</a>
             <a href="{{ url_for('main.org_dashboard', filter='completed') }}" class="filter-btn {{ 'active' if current_filter == 'completed' }}"><i class="fas fa-check-circle"></i> Completed</a>
             <a href="{{ url_for('main.org_dashboard', filter='share') }}" class="filter-btn {{ 'active' if current_filter == 'share' }}"><i class="fas fa-gift"></i> Shared Items</a>
-            <a href="{{ url_for('main.org_dashboard', filter='chats') }}" class="filter-btn {{ 'active' if current_filter == 'chats' }}"><i class="fas fa-comments"></i> Chats</a>
         </div>
     </section>
 
     {% set view = request.args.get('filter', 'needs') %}
 
-    {# --- INCOMING/ACCEPTED/PENDING/COMPLETED OFFERS VIEW --- #}
     {% if view in ['incoming', 'pickup', 'pending_donation', 'completed'] %}
-    <section class="section">
-        <div class="section-header">
-            <h2>{{ view.replace('_', ' ')|title }} Offers</h2>
-            <span class="badge-dashboard">{{ offers|length }} total</span>
-        </div>
-        {% if offers %}
-            <ul class="needs-list">
-                {% for offer in offers %}
-                <div class="needs-list-item">
-                    <div class="item-content-main">
-                        <div class="item-title-main">Offer for: {{ offer.need.title }} (from {{ offer.user.first_name }})</div>
-                        <div class="item-user">Status: <span class="fw-bold">{{ offer.status }}</span></div>
-                        
-                        {% if offer.status == 'Awaiting Pickup' %}
-                            <div class="mt-3 d-flex gap-2">
-                                <form action="{{ url_for('main.update_pickup_status', offer_id=offer.offer_id) }}" method="POST">
-                                    <input type="hidden" name="status" value="Pickup Completed">
-                                    <button type="submit" class="btn btn-sm btn-success">Mark as Picked Up</button>
-                                </form>
-                                <form action="{{ url_for('main.update_pickup_status', offer_id=offer.offer_id) }}" method="POST">
-                                    <input type="hidden" name="status" value="Pickup Failed">
-                                    <button type="submit" class="btn btn-sm btn-warning">Mark as Pickup Failed</button>
-                                </form>
-                            </div>
-                        {% elif offer.status == 'Donation Pending' %}
-                             <form action="{{ url_for('main.complete_donation', offer_id=offer.offer_id) }}" method="POST" enctype="multipart/form-data">
-                                <div class="input-group mt-3">
-                                    <input type="file" name="proof_image" class="form-control form-control-sm" required>
-                                    <button type="submit" class="btn btn-sm btn-info">Complete & Upload Proof</button>
-                                </div>
-                            </form>
-                        {% endif %}
-                    </div>
-                    <a href="{{ url_for('main.review_donation_offer', offer_id=offer.offer_id) }}" class="btn btn-sm btn-outline-primary ms-auto">View Details</a>
-                </div>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <div class="empty-state"><i class="fas fa-box-open"></i><h3>No offers in this category.</h3></div>
-        {% endif %}
-    </section>
-
-    {# --- OUR POSTED NEEDS VIEW --- #}
-    {% elif view == 'needs' %}
-    <section class="section">
-        <div class="section-header">
-            <h2>Our Posted Needs</h2>
-            <span class="badge-dashboard">{{ my_items|length }} total</span>
-        </div>
-        {% if my_items %}
-            <div class="item-grid">
-                {% for need in my_items %}
-                <div class="dashboard-item-card need-card">
-                    <div class="item-content">
-                        <div class="need-card-header">
-                            <div>
-                                <h3 class="item-title">{{ need.title }}</h3>
-                                <div class="item-badges">
-                                    {% if need.categories %}
-                                        {% for cat in need.categories.split(',') %}
-                                            <span class="badge-dashboard">{{ cat }}</span>
-                                        {% endfor %}
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <i class="fas fa-bullhorn need-card-icon"></i>
-                        </div>
-                        <p class="text-muted small my-2">{{ need.description|truncate(120) }}</p>
-                        <div class="item-actions">
-                             <a href="{{ url_for('main.edit_disaster_need', need_id=need.need_id) }}" class="btn btn-sm btn-outline-secondary">Edit</a>
-                            <form action="{{ url_for('main.delete_disaster_need', need_id=need.need_id) }}" method="POST" onsubmit="return confirm('Are you sure? This cannot be undone.');">
-                                <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <div class="empty-state"><i class="fas fa-bullhorn"></i><h3>No needs posted yet</h3><p>Click the '+' button to post a new disaster need.</p></div>
-        {% endif %}
-    </section>
-
-    {# --- SHARED ITEMS VIEW --- #}
-    {% elif view == 'share' %}
-    <section class="section">
-        <div class="section-header">
-            <h2>Available 'Share' Items from Users</h2>
-            <span class="badge-dashboard">{{ all_items|length }} total</span>
-        </div>
-        {% if all_items %}
-            <div class="item-grid">
-                {% for item in all_items %}
-                <div class="dashboard-item-card">
-                    <a href="{{ url_for('main.view_item', item_id=item.item_id) }}" class="text-decoration-none">
-                        <div class="item-image"><img src="{% if item.images.first() %}{{ url_for('static', filename=item.images.first().image_url) }}{% else %}{{ url_for('static', filename='images/item_placeholder.jpg') }}{% endif %}" alt="{{ item.title }}"></div>
-                    </a>
-                    <div class="item-content">
-                        <h3 class="item-title">{{ item.title }}</h3>
-                        <div class="item-badges"><span class="badge-dashboard">{{ item.category }}</span><span class="badge-dashboard">{{ item.condition }}</span></div>
-                        <div class="item-actions">
-                            <a href="{{ url_for('main.view_item', item_id=item.item_id) }}" class="btn-dashboard btn-primary-dashboard"><span>View Details</span><i class="fas fa-arrow-right"></i></a>
-                        </div>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <div class="empty-state"><i class="fas fa-box-open"></i><h3>No 'Share' items found</h3><p>There are no items available from users to share right now.</p></div>
-        {% endif %}
-    </section>
-    
-    {# --- CHATS VIEW --- #}
-    {% elif view == 'chats' %}
+        {% elif view == 'needs' %}
+        {% elif view == 'share' %}
+        {% elif view == 'chats' %}
     <section class="section">
         <div class="section-header">
             <h2>Chat Sessions</h2>
@@ -292,12 +184,24 @@
         {% if chat_sessions %}
             <ul class="needs-list">
                 {% for session in chat_sessions %}
-                <a href="{{ url_for('main.chat', session_id=session.session_id) }}" class="needs-list-item">
-                    <div class="item-content-main">
-                        <div class="item-title-main">Chat with {{ session.user.first_name }} about {{ session.item.title }}</div>
-                        <div class="item-user">Status: <span class="fw-bold">{{ session.status }}</span></div>
-                    </div>
-                </a>
+                <li class="needs-list-item {% if session.session_id in unread_session_ids %}border-primary{% endif %}">
+                    <a href="{{ url_for('main.chat', session_id=session.session_id) }}" class="text-decoration-none text-body flex-grow-1">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div class="item-content-main">
+                                <div class="item-title-main">Chat with {{ session.user.first_name }} about {{ session.subject.title if session.subject else '[Deleted Need]' }}</div>
+                                <div class="item-user">Status: <span class="fw-bold">{{ session.status }}</span></div>
+                            </div>
+                            {% if session.session_id in unread_session_ids %}
+                            <span class="badge bg-primary me-3">Unread</span>
+                            {% endif %}
+                        </div>
+                    </a>
+                    <form action="{{ url_for('main.delete_chat_session', session_id=session.session_id) }}" method="POST" class="ms-3">
+                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Chat" onclick="return confirm('Are you sure you want to delete this chat history?')">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </form>
+                </li>
                 {% endfor %}
             </ul>
         {% else %}
@@ -306,61 +210,6 @@
     </section>
     {% endif %}
 </main>
-
-<div class="fab-container">
-    <ul class="fab-menu" id="fab-menu">
-        <li class="fab-menu-item">
-            <a href="#" data-bs-toggle="modal" data-bs-target="#postNeedModal">
-                <i class="fas fa-bullhorn fa-fw"></i>
-                <span>Post a Need</span>
-            </a>
-        </li>
-        <li class="fab-menu-item">
-            <a href="{{ url_for('main.new_item', type='Share') }}">
-                <i class="fas fa-gift fa-fw"></i>
-                <span>Post a Share Item</span>
-            </a>
-        </li>
-    </ul>
-    <button class="fab-button" id="fab-button" title="Quick Actions">
-        <i class="fas fa-plus fab-button-icon"></i>
-    </button>
-</div>
-
-<div class="modal fade" id="postNeedModal" tabindex="-1" aria-labelledby="postNeedModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="postNeedModalLabel">Post a New Disaster Need</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <form method="POST" action="{{ url_for('main.org_dashboard') }}" novalidate>
-                    {{ form.hidden_tag() }}
-                    <div class="mb-3">
-                        {{ form.title.label(class="form-label") }}
-                        {{ form.title(class="form-control") }}
-                    </div>
-                    <div class="mb-3">
-                        {{ form.categories.label(class="form-label") }}
-                        {{ form.categories(class="form-select", id="categories") }} 
-                    </div>
-                    <div class="mb-3">
-                        {{ form.description.label(class="form-label") }}
-                        {{ form.description(class="form-control", rows="3") }}
-                    </div>
-                    <div class="mb-3">
-                        {{ form.location.label(class="form-label") }}
-                        {{ form.location(class="form-select") }}
-                    </div>
-                    <div class="d-grid">
-                        <button type="submit" class="btn btn-primary">Submit Need</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {

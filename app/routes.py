@@ -1,4 +1,5 @@
 # app/routes.py
+
 from flask import (
     Blueprint, render_template, redirect, url_for,
     flash, request, abort, jsonify, session, send_from_directory
@@ -8,7 +9,7 @@ from flask_login import (
     login_required
 )
 from werkzeug.utils import secure_filename
-from sqlalchemy import or_
+from sqlalchemy import or_, not_, and_
 
 from app import db, login_manager
 from app.models import (
@@ -17,7 +18,7 @@ from app.models import (
     ChatSession, ChatMessage, DealProposal,
     DisasterNeed, DonationOffer, OfferedItem,
     Feedback, Report, Bookmark,
-    CategoryFollow, Notification, TradeRequest
+    CategoryFollow, Notification, TradeRequest, SystemSetting
 )
 from app.forms import (
     RegistrationForm, OrganizationRegistrationForm, LoginForm,
@@ -34,9 +35,8 @@ from functools import wraps
 import os
 
 main = Blueprint("main", __name__)
-# -------------------------
-# UPLOAD FOLDERS
-# -------------------------
+
+# --- Upload Folders ---
 USER_UPLOAD_FOLDER = os.path.join("app", "static", "images", "profiles", "users")
 ORG_UPLOAD_FOLDER = os.path.join("app", "static", "images", "profiles", "orgs")
 ITEM_UPLOAD_FOLDER = os.path.join("app", "static", "images", "items")
@@ -46,9 +46,7 @@ os.makedirs(ORG_UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(ITEM_UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(CHAT_UPLOAD_FOLDER, exist_ok=True)
 
-# -------------------------
-# LOGIN MANAGER LOADER
-# -------------------------
+
 @login_manager.user_loader
 def load_user(user_id):
     try:
@@ -64,49 +62,53 @@ def load_user(user_id):
         return Organization.query.get(id_val)
     return None
 
-
-
-# --- START: New logic for Notification Count Bubble ---
-@main.context_processor
-def inject_unread_count():
-    """Injects the unread notification count and global categories into all templates."""
-    
-    # --- Notification Count Logic (from previous step) ---
-    unread_count = 0
-    if current_user.is_authenticated and current_user.__class__.__name__ == 'User':
-        from app.models import Notification 
-        unread_count = Notification.query.filter_by(user_id=current_user.user_id, status="Unread").count()
-        
-    # --- Category Suggestion Logic ---
-    from app.forms import CATEGORIES
-    # Extract just the category names (second element of tuple) excluding the initial placeholder
-    category_suggestions = [c[0] for c in CATEGORIES if c[0]]
-
-    return dict(unread_count=unread_count, categories=category_suggestions)
-# --- END: New logic for Notification Count Bubble ---
-
+# --- Merged Context Processors ---
 @main.context_processor
 def inject_globals():
-    """Injects the unread notification count and global categories into all templates."""
-    
-    # --- Notification Count Logic ---
-    unread_count = 0
-    if current_user.is_authenticated and current_user.__class__.__name__ == 'User':
-        from app.models import Notification 
-        unread_count = Notification.query.filter_by(user_id=current_user.user_id, status="Unread").count()
-        
-    # --- Category Suggestion Logic ---
+    """Injects unread counts and global categories into all templates."""
+    unread_notifications = 0
+    has_unread_chats = False
+
+    if current_user.is_authenticated:
+        if isinstance(current_user, User):
+            # Unread notifications for users
+            unread_notifications = Notification.query.filter_by(user_id=current_user.user_id, status="Unread").count()
+            # Unread chats for users
+            user_sessions = ChatSession.query.filter(
+                (ChatSession.user_id == current_user.user_id) |
+                (ChatSession.other_user_id == current_user.user_id)
+            ).all()
+            session_ids = [s.session_id for s in user_sessions]
+            if session_ids:
+                unread_chat_count = db.session.query(ChatMessage.message_id).filter(
+                    ChatMessage.session_id.in_(session_ids),
+                    ChatMessage.is_read == False,
+                    not_(and_(ChatMessage.sender_id == current_user.user_id, ChatMessage.sender_type == 'user'))
+                ).count()
+                has_unread_chats = unread_chat_count > 0
+
+        elif isinstance(current_user, Organization):
+            # Unread chats for organizations
+            org_sessions = ChatSession.query.filter(ChatSession.org_id == current_user.org_id).all()
+            session_ids = [s.session_id for s in org_sessions]
+            if session_ids:
+                unread_chat_count = db.session.query(ChatMessage.message_id).filter(
+                    ChatMessage.session_id.in_(session_ids),
+                    ChatMessage.is_read == False,
+                    ChatMessage.sender_type == 'user'
+                ).count()
+                has_unread_chats = unread_chat_count > 0
+
     from app.forms import CATEGORIES
-    # Extract just the category names (second element of tuple) excluding the initial placeholder
-    category_suggestions = [c[1] for c in CATEGORIES if c[0]]
+    category_suggestions = [c[0] for c in CATEGORIES if c[0]]
 
-    return dict(unread_count=unread_count, categories=category_suggestions)
-# --- END: New logic for Notification Count Bubble ---
+    return dict(
+        unread_count=unread_notifications,
+        has_unread_chats=has_unread_chats,
+        categories=category_suggestions
+    )
 
-
-# -------------------------
-# ROLE CHECK DECORATOR
-# -------------------------
+# --- Role Check Decorator ---
 def role_required(role):
     def decorator(f):
         @wraps(f)
@@ -462,14 +464,11 @@ def logout():
 @login_required
 def profile():
     user = current_user._get_current_object()
-    
-    # ## NEW: Fetch blocked chat sessions ##
     blocked_chats = []
     if isinstance(user, User):
-        # Find all sessions where the status is 'Blocked' and the current user was involved
         blocked_chats = ChatSession.query.filter(
             ChatSession.status == 'Blocked',
-            or_(ChatSession.user1_id == user.user_id, ChatSession.user2_id == user.user_id)
+            or_(ChatSession.user_id == user.user_id, ChatSession.other_user_id == user.user_id)
         ).all()
     
     if isinstance(user, User):
@@ -905,8 +904,6 @@ def org_reset_token(token):
 # -------------------------
 # ORG DASHBOARD
 # -------------------------
-# In app/routes.py
-
 @main.route("/org/dashboard", methods=['GET', 'POST'])
 @login_required
 @role_required("org")
@@ -924,9 +921,7 @@ def org_dashboard():
         )
         db.session.add(new_need)
         db.session.commit()
-
         send_disaster_notifications(new_need)
-
         flash("New disaster need has been posted successfully.", "success")
         return redirect(url_for('main.org_dashboard', filter='needs'))
 
@@ -934,12 +929,23 @@ def org_dashboard():
     
     all_items, my_items, offers, chat_sessions = [], [], [], []
 
+    org_sessions = ChatSession.query.filter(ChatSession.org_id == current_user.org_id).all()
+    session_ids = [s.session_id for s in org_sessions]
+    unread_session_ids = set()
+    if session_ids:
+        unread_messages_query = ChatMessage.query.filter(
+            ChatMessage.session_id.in_(session_ids),
+            ChatMessage.is_read == False,
+            ChatMessage.sender_type == 'user'
+        )
+        unread_session_ids = {msg.session_id for msg in unread_messages_query.all()}
+
     if current_filter == 'needs':
         my_items = DisasterNeed.query.filter_by(org_id=org.org_id).order_by(DisasterNeed.posted_at.desc()).all()
     elif current_filter == 'share':
         all_items = Item.query.filter(Item.status == "Active", Item.type == 'Share').order_by(Item.created_at.desc()).all()
     elif current_filter == 'chats':
-        chat_sessions = ChatSession.query.filter_by(org_id=org.org_id).order_by(ChatSession.started_at.desc()).all()
+        chat_sessions = sorted(org_sessions, key=lambda s: s.started_at, reverse=True)
     else:
         offer_query = DonationOffer.query.filter_by(org_id=org.org_id)
         if current_filter == 'incoming':
@@ -950,7 +956,6 @@ def org_dashboard():
             offer_query = offer_query.filter(DonationOffer.status == 'Donation Pending')
         elif current_filter == 'completed':
             offer_query = offer_query.filter(DonationOffer.status == 'Completed')
-        
         offers = offer_query.order_by(DonationOffer.created_at.desc()).all()
 
     return render_template(
@@ -960,7 +965,8 @@ def org_dashboard():
         my_items=my_items,
         offers=offers,
         chat_sessions=chat_sessions,
-        form=form
+        form=form,
+        unread_session_ids=unread_session_ids
     )
 
 
@@ -973,41 +979,61 @@ def org_dashboard():
 @role_required("user")
 def dashboard():
     view = request.args.get("view", "all")
-    filter_type = request.args.get("filter")
+    filter_type = request.args.get('filter')
 
-    items, chat_sessions, my_offers, disaster_needs = [], [], [], []
+    items, bookmarks, disaster_needs, my_offers = [], [], [], []
+    regular_chats, disaster_chats = [], []
+    unread_session_ids, has_unread_regular, has_unread_disaster = set(), False, False
 
-    if filter_type == 'Disaster':
+    user_sessions = ChatSession.query.filter(
+        (ChatSession.user_id == current_user.user_id) |
+        (ChatSession.other_user_id == current_user.user_id)
+    ).all()
+    session_ids = [s.session_id for s in user_sessions]
+    if session_ids:
+        unread_messages_query = ChatMessage.query.filter(
+            ChatMessage.session_id.in_(session_ids),
+            ChatMessage.is_read == False,
+            not_(and_(ChatMessage.sender_id == current_user.user_id, ChatMessage.sender_type == 'user'))
+        )
+        unread_session_ids = {msg.session_id for msg in unread_messages_query.all()}
+
+    if view == "chats":
+        all_sessions = sorted(user_sessions, key=lambda s: s.started_at, reverse=True)
+        regular_chats = [s for s in all_sessions if s.trade_item_id is not None]
+        disaster_chats = [s for s in all_sessions if s.disaster_need_id is not None]
+        has_unread_regular = any(s.session_id in unread_session_ids for s in regular_chats)
+        has_unread_disaster = any(s.session_id in unread_session_ids for s in disaster_chats)
+    elif filter_type == 'Disaster':
         disaster_needs = DisasterNeed.query.order_by(DisasterNeed.posted_at.desc()).all()
-    else:
-        if view == "mine":
-            query = Item.query.filter_by(user_id=current_user.user_id)
-            if filter_type in ["Trade", "Share"]:
-                query = query.filter_by(type=filter_type)
-            items = query.order_by(Item.created_at.desc()).all()
-        elif view == "bookmarks":
-            user_bookmarks = Bookmark.query.filter_by(user_id=current_user.user_id).order_by(Bookmark.saved_at.desc()).all()
-            items = [b.item for b in user_bookmarks]
-        elif view == "chats":
-            chat_sessions = ChatSession.query.filter(
-                or_(ChatSession.user_id == current_user.user_id, ChatSession.other_user_id == current_user.user_id)
-            ).order_by(ChatSession.started_at.desc()).all()
-        elif view == "donations":
-            my_offers = DonationOffer.query.filter_by(user_id=current_user.user_id).order_by(DonationOffer.created_at.desc()).all()
-        else:
-            view = "all"
-            query = Item.query.filter(Item.status == "Active", Item.user_id != current_user.user_id)
-            if filter_type in ["Trade", "Share"]:
-                query = query.filter_by(type=filter_type)
-            items = query.order_by(Item.created_at.desc()).all()
+    elif view == "mine":
+        query = Item.query.filter_by(user_id=current_user.user_id)
+        if filter_type in ["Trade", "Share"]:
+            query = query.filter_by(type=filter_type)
+        items = query.order_by(Item.created_at.desc()).all()
+    elif view == "bookmarks":
+        user_bookmarks = Bookmark.query.filter_by(user_id=current_user.user_id).order_by(Bookmark.saved_at.desc()).all()
+        items = [b.item for b in user_bookmarks]
+    elif view == "donations":
+        my_offers = DonationOffer.query.filter_by(user_id=current_user.user_id).order_by(DonationOffer.created_at.desc()).all()
+    else: # 'all' view
+        query = Item.query.filter(Item.status == "Active", Item.user_id != current_user.user_id)
+        if filter_type in ["Trade", "Share"]:
+            query = query.filter_by(type=filter_type)
+        items = query.order_by(Item.created_at.desc()).all()
 
     return render_template(
         "dashboard/user_dashboard.html",
         items=items,
-        chat_sessions=chat_sessions,
-        my_offers=my_offers,
+        view=view,
+        bookmarks=bookmarks,
         disaster_needs=disaster_needs,
-        view=view
+        my_offers=my_offers,
+        regular_chats=regular_chats,
+        disaster_chats=disaster_chats,
+        unread_session_ids=unread_session_ids,
+        has_unread_regular=has_unread_regular,
+        has_unread_disaster=has_unread_disaster
     )
 
 
@@ -1406,29 +1432,28 @@ def add_bookmark(item_id):
     return redirect(request.referrer or url_for("main.dashboard"))
 
 
-# ADD THIS NEW ROUTE for deleting chats
-@main.route('/chat/<int:session_id>/delete', methods=['POST'])
+@main.route('/chat/session/<int:session_id>/delete', methods=['POST'])
 @login_required
 def delete_chat_session(session_id):
     session = ChatSession.query.get_or_404(session_id)
     
-    # Security check: ensure current user is part of the chat
-    if session.user1_id != current_user.user_id and session.user2_id != current_user.user_id:
-        abort(403)
-        
-    # Delete associated messages first
-    ChatMessage.query.filter_by(session_id=session_id).delete()
+    is_user = isinstance(current_user, User)
+    is_org = isinstance(current_user, Organization)
 
-    # FIX: Explicitly delete the dependent DealProposal record first.
-    # The DealProposal.chat_session_id is NOT NULL, so it must be deleted.
-    DealProposal.query.filter_by(chat_session_id=session_id).delete()
-    
-    # Now delete the session itself
-    db.session.delete(session)
+    is_participant = (is_user and (session.user_id == current_user.user_id or session.other_user_id == current_user.user_id)) or \
+                     (is_org and session.org_id == current_user.org_id)
+
+    if not is_participant:
+        abort(403)
+
+    db.session.delete(session) # Cascade delete will handle messages
     db.session.commit()
+    flash('Chat session has been deleted.', 'success')
     
-    flash("Chat session has been deleted.", "success")
-    return redirect(url_for('main.dashboard', view='chats'))
+    if is_org:
+        return redirect(url_for('main.org_dashboard', filter='chats'))
+    else:
+        return redirect(url_for('main.dashboard', view='chats'))
 
 
 @main.route("/bookmarks")
@@ -2081,13 +2106,11 @@ def unblock_chat(session_id):
     return redirect(url_for('main.profile'))
 
 
-
 @main.route("/chat/<int:session_id>", methods=["GET", "POST"])
 @login_required
 def chat(session_id):
     chat_session = ChatSession.query.get_or_404(session_id)
     
-    # --- UPDATED SECURITY CHECK ---
     is_user = isinstance(current_user, User)
     is_org = isinstance(current_user, Organization)
     
@@ -2095,14 +2118,36 @@ def chat(session_id):
        not (is_org and chat_session.org_id == current_user.org_id):
         abort(403)
 
-    # --- DETERMINE OTHER PARTICIPANT ---
+    sender_type_to_mark = 'org' if is_user and chat_session.org_id else 'user'
+    sender_id_to_check = current_user.org_id if is_org else current_user.user_id
+    
+    unread_messages = ChatMessage.query.filter(
+        ChatMessage.session_id == session_id,
+        ChatMessage.is_read == False,
+        not_(and_(ChatMessage.sender_id == sender_id_to_check, ChatMessage.sender_type == ('org' if is_org else 'user')))
+    ).all()
+
+    for msg in unread_messages:
+        msg.is_read = True
+    db.session.commit()
+
+    the_item = chat_session.subject
+    if not the_item:
+        class DummyItem:
+            def __init__(self):
+                self.title = "[Deleted Item/Need]"
+                self.images = []
+                self.item_id = 0
+                self.need_id = 0
+        the_item = DummyItem()
+        
     other_user, organization = None, None
-    if chat_session.org_id: # It's an org chat
+    if chat_session.org_id:
         if is_org:
             other_user = chat_session.user
-        else: # Current user must be the user
+        else:
             organization = chat_session.organization
-    else: # It's a user-user chat
+    else:
         other_user = chat_session.other_user if chat_session.user_id == current_user.user_id else chat_session.user
         
     deal = DealProposal.query.filter_by(chat_session_id=session_id).first()
@@ -2112,9 +2157,7 @@ def chat(session_id):
         if chat_session.status != 'Active':
             flash("Cannot send messages in this chat.", "danger")
             return redirect(url_for("main.chat", session_id=session_id))
-
         if not form.message.data and not form.image.data:
-            flash("Cannot send an empty message.", "warning")
             return redirect(url_for("main.chat", session_id=session_id))
 
         image_filename = None
@@ -2123,7 +2166,7 @@ def chat(session_id):
             image_filename = secure_filename(f"{datetime.utcnow().timestamp()}_{image_file.filename}")
             image_file.save(os.path.join(CHAT_UPLOAD_FOLDER, image_filename))
             image_filename = f"images/chat_uploads/{image_filename}"
-
+        
         msg = ChatMessage(
             session_id=chat_session.session_id,
             sender_id=current_user.user_id if is_user else current_user.org_id,
@@ -2134,13 +2177,14 @@ def chat(session_id):
         db.session.add(msg)
         db.session.commit()
         return redirect(url_for("main.chat", session_id=session_id))
-
+    
     messages = ChatMessage.query.filter_by(session_id=session_id).order_by(ChatMessage.timestamp.asc()).all()
     
     return render_template(
         "features/chat.html", 
         messages=messages, form=form, session=chat_session, 
-        other_user=other_user, organization=organization, deal=deal
+        other_user=other_user, organization=organization, deal=deal,
+        the_item=the_item
     )
 
 
