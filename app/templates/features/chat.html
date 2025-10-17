@@ -126,13 +126,24 @@
 <div class="container-fluid p-0">
     <div class="chat-container">
         <div class="chat-header">
-            <a href="{{ url_for('main.public_profile', user_id=other_user.user_id) }}" class="d-flex align-items-center text-decoration-none">
-                <img src="{{ url_for('static', filename=other_user.profile_picture or 'images/users_placeholder.png') }}" alt="{{ other_user.first_name }}" class="chat-header-img">
-                <div class="chat-header-info">
-                    <h5>{{ other_user.first_name }} {{ other_user.last_name }}</h5>
-                    <p>Discussing: {{ session.item.title }}</p>
+            {% if other_user %}
+                <a href="{{ url_for('main.public_profile', user_id=other_user.user_id) }}" class="d-flex align-items-center text-decoration-none">
+                    <img src="{{ url_for('static', filename=other_user.profile_picture or 'images/users_placeholder.png') }}" alt="{{ other_user.first_name }}" class="chat-header-img">
+                    <div class="chat-header-info">
+                        <h5>{{ other_user.first_name }} {{ other_user.last_name }}</h5>
+                        <p>Discussing: {{ session.item.title }}</p>
+                    </div>
+                </a>
+            {% elif organization %}
+                 <div class="d-flex align-items-center text-decoration-none">
+                    <img src="{{ url_for('static', filename=organization.profile_picture or 'images/orgs_placeholder.png') }}" alt="{{ organization.name }}" class="chat-header-img">
+                    <div class="chat-header-info">
+                        <h5>{{ organization.name }}</h5>
+                        <p>Discussing: {{ session.item.title }}</p>
+                    </div>
                 </div>
-            </a>
+            {% endif %}
+
             <div class="ms-auto d-flex align-items-center">
                 <a href="{{ url_for('main.view_item', item_id=session.item.item_id) }}" class="btn btn-sm btn-outline-secondary">View Item</a>
                 <div class="dropdown ms-2">
@@ -154,7 +165,7 @@
         <div class="chat-main">
             <div class="chat-messages" id="chatBox">
                 {% for msg in messages %}
-                <div class="msg {% if msg.sender_id == current_user.user_id %}sent{% else %}received{% endif %}" id="msg-container-{{ msg.message_id }}">
+                <div class="msg {% if (current_user.__class__.__name__ == 'User' and msg.sender_id == current_user.user_id and msg.sender_type == 'user') or (current_user.__class__.__name__ == 'Organization' and msg.sender_id == current_user.org_id and msg.sender_type == 'org') %}sent{% else %}received{% endif %}" id="msg-container-{{ msg.message_id }}">
                     <div class="msg-content">
                         {% if msg.deleted_at %}
                             <p class="mb-0 msg-content-deleted"><i class="fas fa-ban me-2"></i>Message deleted</p>
@@ -164,7 +175,7 @@
                         {% endif %}
                         <div class="msg-meta">{{ (msg.timestamp | localdatetime).strftime('%I:%M %p') }}</div>
                     </div>
-                    {% if msg.sender_id == current_user.user_id and not msg.deleted_at %}
+                    {% if ((current_user.__class__.__name__ == 'User' and msg.sender_id == current_user.user_id and msg.sender_type == 'user') or (current_user.__class__.__name__ == 'Organization' and msg.sender_id == current_user.org_id and msg.sender_type == 'org')) and not msg.deleted_at %}
                     <div class="msg-actions">
                         <button type="button" class="delete-msg-btn" data-message-id="{{ msg.message_id }}" title="Delete Message">
                             <i class="fas fa-trash-alt"></i>
@@ -182,7 +193,7 @@
 
             <aside class="chat-sidebar">
                 
-                {% set trade_request = session.item.trade_requests_received.filter_by(requester_id=other_user.user_id).first() or session.item.trade_requests_made.filter_by(owner_id=other_user.user_id).first() %}
+                {% set trade_request = session.item.trade_requests_received.filter_by(requester_id=other_user.user_id).first() if other_user else none %}
 
                 <div class="sidebar-card">
                     <div class="item-preview-tabs">

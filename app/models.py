@@ -1,9 +1,13 @@
+# app/models.py
+
 from datetime import datetime, date
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 from app import db
 from itsdangerous import URLSafeTimedSerializer as Serializer
 from flask import current_app
+from sqlalchemy import and_
+from sqlalchemy.orm import foreign
 
 # ---------- USERS ----------
 class User(UserMixin, db.Model):
@@ -16,20 +20,21 @@ class User(UserMixin, db.Model):
     phone = db.Column(db.String(50))
     location = db.Column(db.String(255))
     profile_picture = db.Column(db.String(255), nullable=True)
-    status = db.Column(db.String(50), default="Active")  # Active / Blocked / Deactivated
+    status = db.Column(db.String(50), default="Active")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    fcm_token = db.Column(db.String(255), nullable=True) # <-- ADD THIS LINE
+    fcm_token = db.Column(db.String(255), nullable=True)
     otp = db.Column(db.String(6), nullable=True)
     otp_expiry = db.Column(db.DateTime, nullable=True)
     is_verified = db.Column(db.Boolean, default=False)
 
-
-    # Relationships
     items = db.relationship("Item", backref="owner", lazy="dynamic")
     bookmarks = db.relationship("Bookmark", backref="user", lazy="dynamic")
-    chat_sessions1 = db.relationship("ChatSession", foreign_keys="ChatSession.user1_id", backref="user1", lazy="dynamic")
-    chat_sessions2 = db.relationship("ChatSession", foreign_keys="ChatSession.user2_id", backref="user2", lazy="dynamic")
-    messages = db.relationship("ChatMessage", backref="sender", lazy="dynamic")
+    messages = db.relationship(
+        "ChatMessage",
+        primaryjoin="and_(User.user_id==foreign(ChatMessage.sender_id), ChatMessage.sender_type=='user')",
+        lazy="dynamic",
+        overlaps="org_sender"
+    )
     feedbacks = db.relationship("Feedback", backref="user", lazy="dynamic")
     reports = db.relationship("Report", backref="reporter", lazy="dynamic")
     category_follows = db.relationship("CategoryFollow", backref="user", lazy="dynamic")
@@ -67,7 +72,7 @@ class Admin(UserMixin, db.Model):
     last_name = db.Column(db.String(255))
     email = db.Column(db.String(255), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
-    status = db.Column(db.String(50), default="Active")  # Active / Inactive
+    status = db.Column(db.String(50), default="Active")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def set_password(self, raw_password):
@@ -90,16 +95,21 @@ class Organization(UserMixin, db.Model):
     phone = db.Column(db.String(100))
     location = db.Column(db.String(255))
     profile_picture = db.Column(db.String(255), nullable=True)
-    status = db.Column(db.String(50), default="Pending")  # Pending / Approved / Blocked
+    status = db.Column(db.String(50), default="Pending")
     registered_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    # New fields for OTP and verification
     otp = db.Column(db.String(6), nullable=True)
     otp_expiry = db.Column(db.DateTime, nullable=True)
     is_verified = db.Column(db.Boolean, default=False)
 
-    # Relationships
     disaster_needs = db.relationship("DisasterNeed", backref="organization", lazy="dynamic")
+    messages = db.relationship(
+        "ChatMessage",
+        primaryjoin="and_(Organization.org_id==foreign(ChatMessage.sender_id), ChatMessage.sender_type=='org')",
+        lazy="dynamic",
+        overlaps="messages,user_sender"
+    )
+
 
     def set_password(self, raw_password):
         self.password = generate_password_hash(raw_password)
@@ -123,6 +133,8 @@ class Organization(UserMixin, db.Model):
             return None
         return Organization.query.get(org_id)
 
+# ... (rest of the models remain the same)
+
 # ---------- LOGIN LOG ----------
 class LoginLog(db.Model):
     __tablename__ = "login_logs"
@@ -140,17 +152,16 @@ class Item(db.Model):
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
     category = db.Column(db.String(255))
-    type = db.Column(db.String(50))  # Trade / Share / Disaster
-    condition = db.Column(db.String(50))  # New / Used / Old
-    urgency_level = db.Column(db.String(50))  # Urgent / Flexible
+    type = db.Column(db.String(50))
+    condition = db.Column(db.String(50))
+    urgency_level = db.Column(db.String(50))
     expected_return = db.Column(db.String(255))
     location = db.Column(db.String(255))
-    status = db.Column(db.String(50), default="Active")  # Active / Traded / Verified / Expired
+    status = db.Column(db.String(50), default="Active")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     expires_at = db.Column(db.DateTime, nullable=True)
     deal_finalized_at = db.Column(db.DateTime, nullable=True)
 
-    # Relationships
     histories = db.relationship("ItemHistory", backref="item", lazy="dynamic")
     chat_sessions = db.relationship("ChatSession", backref="item", lazy="dynamic")
     bookmarks = db.relationship("Bookmark", backref="item", lazy="dynamic")
@@ -167,10 +178,9 @@ class TradeRequest(db.Model):
     item_requested_id = db.Column(db.Integer, db.ForeignKey('items.item_id'), nullable=False)
     requester_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
     owner_id = db.Column(db.Integer, db.ForeignKey('users.user_id'), nullable=False)
-    status = db.Column(db.String(50), default='pending')  # pending, accepted, rejected
+    status = db.Column(db.String(50), default='pending')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Relationships
     requester = db.relationship('User', foreign_keys=[requester_id])
     owner = db.relationship('User', foreign_keys=[owner_id])
 
@@ -179,14 +189,11 @@ class DealProposal(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     chat_session_id = db.Column(db.Integer, db.ForeignKey("chat_sessions.session_id"), nullable=False, unique=True)
     
-    # Track the status of each participant
-    # Status can be: 'pending', 'confirmed', 'rejected'
     proposer_status = db.Column(db.String(50), default='pending', nullable=False)
     owner_status = db.Column(db.String(50), default='pending', nullable=False)
     
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationship back to the chat session
     session = db.relationship("ChatSession", backref=db.backref("deal_proposal", uselist=False))
 
 
@@ -205,7 +212,7 @@ class ItemHistory(db.Model):
     history_id = db.Column(db.Integer, primary_key=True)
     item_id = db.Column(db.Integer, db.ForeignKey("items.item_id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=True)
-    action = db.Column(db.String(255))  # Reposted / Expired / Deleted
+    action = db.Column(db.String(255))
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -214,23 +221,31 @@ class ChatSession(db.Model):
     __tablename__ = "chat_sessions"
     session_id = db.Column(db.Integer, primary_key=True)
     item_id = db.Column(db.Integer, db.ForeignKey("items.item_id"), nullable=False)
-    user1_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
-    user2_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
-    status = db.Column(db.String(50), default="Active")  # Active / Blocked / Ended / Confirmed
+    
+    user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
+    org_id = db.Column(db.Integer, db.ForeignKey("organizations.org_id"), nullable=True)
+    other_user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=True)
+
+    status = db.Column(db.String(50), default="Active")
     started_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Relationships
     messages = db.relationship("ChatMessage", backref="session", lazy="dynamic")
+    user = db.relationship("User", foreign_keys=[user_id])
+    other_user = db.relationship("User", foreign_keys=[other_user_id])
+    organization = db.relationship("Organization", foreign_keys=[org_id])
+
+    __table_args__ = (
+        db.CheckConstraint('(org_id IS NOT NULL AND other_user_id IS NULL) OR (org_id IS NULL AND other_user_id IS NOT NULL)', name='chk_participant'),
+    )
 
 
 class ChatMessage(db.Model):
     __tablename__ = "chat_messages"
     
-    # ## ENSURE THIS LINE EXISTS AND IS CORRECT ##
     message_id = db.Column(db.Integer, primary_key=True)
-    
     session_id = db.Column(db.Integer, db.ForeignKey("chat_sessions.session_id"), nullable=False)
-    sender_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
+    sender_type = db.Column(db.String(50), nullable=False)
+    sender_id = db.Column(db.Integer, nullable=False)
     message = db.Column(db.Text, nullable=True)
     image_url = db.Column(db.String(255), nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
@@ -242,17 +257,14 @@ class DisasterNeed(db.Model):
     __tablename__ = "disaster_needs"
     need_id = db.Column(db.Integer, primary_key=True)
     org_id = db.Column(db.Integer, db.ForeignKey("organizations.org_id"), nullable=False)
-    title = db.Column(db.String(255), nullable=True) # <-- ADD THIS
-    categories = db.Column(db.Text, nullable=True) # Will store comma-separated categories
+    title = db.Column(db.String(255), nullable=True)
+    categories = db.Column(db.Text, nullable=True)
     description = db.Column(db.Text, nullable=False)
     location = db.Column(db.String(255))
     posted_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 # ---------- DISASTER DONATIONS ----------
-from datetime import datetime
-from app import db
-
 class DonationOffer(db.Model):
     __tablename__ = 'donation_offers'
     offer_id = db.Column(db.Integer, primary_key=True)
@@ -264,10 +276,9 @@ class DonationOffer(db.Model):
     verified_at = db.Column(db.DateTime, nullable=True)
     picked_up_at = db.Column(db.DateTime, nullable=True)
     completed_at = db.Column(db.DateTime, nullable=True)
-    pickup_retries = db.Column(db.Integer, default=0) # To track the one-time retry
-    proof_image_url = db.Column(db.String(255), nullable=True) # For orgs to upload proof
+    pickup_retries = db.Column(db.Integer, default=0)
+    proof_image_url = db.Column(db.String(255), nullable=True)
     
-    # Relationships
     user = db.relationship('User', backref='donation_offers')
     need = db.relationship('DisasterNeed', backref='donation_offers')
     organization = db.relationship('Organization', backref='donation_offers')
@@ -278,10 +289,10 @@ class OfferedItem(db.Model):
     offered_item_id = db.Column(db.Integer, primary_key=True)
     offer_id = db.Column(db.Integer, db.ForeignKey('donation_offers.offer_id'), nullable=False)
     title = db.Column(db.String(255), nullable=False)
-    category = db.Column(db.String(255), nullable=True) # <-- ADD THIS LINE
+    category = db.Column(db.String(255), nullable=True)
     description = db.Column(db.Text, nullable=True)
     quantity = db.Column(db.Integer, nullable=False, default=1)
-    condition = db.Column(db.String(50)) # New / Used
+    condition = db.Column(db.String(50))
     image_url = db.Column(db.String(255), nullable=True)
     manufacture_date = db.Column(db.Date, nullable=True)
     expiry_date = db.Column(db.Date, nullable=True)
@@ -295,7 +306,7 @@ class Feedback(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
     message = db.Column(db.Text, nullable=False)
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
-    status = db.Column(db.String(50), default="Open")  # Open / Responded / Closed
+    status = db.Column(db.String(50), default="Open")
 
 
 # ---------- REPORT ----------
@@ -306,7 +317,6 @@ class Report(db.Model):
     item_id = db.Column(db.Integer, db.ForeignKey("items.item_id"), nullable=True)
     chat_session_id = db.Column(db.Integer, db.ForeignKey("chat_sessions.session_id"), nullable=True)
     
-    # --- ADD THESE TWO LINES for reporting an organization regarding a donation ---
     reported_org_id = db.Column(db.Integer, db.ForeignKey("organizations.org_id"), nullable=True)
     donation_offer_id = db.Column(db.Integer, db.ForeignKey("donation_offers.offer_id"), nullable=True)
 
@@ -338,16 +348,10 @@ class Notification(db.Model):
     __tablename__ = "notifications"
     notification_id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.user_id"), nullable=False)
-    
-
     item_id = db.Column(db.Integer, db.ForeignKey("items.item_id"), nullable=True)
-    
     message = db.Column(db.Text, nullable=False)
     sent_at = db.Column(db.DateTime, default=datetime.utcnow)
-    status = db.Column(db.String(50), default="Unread")  # Read / Unread
-
-    #Relationships
-
+    status = db.Column(db.String(50), default="Unread")
     item = db.relationship("Item", backref="notifications")
 
 

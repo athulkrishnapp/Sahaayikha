@@ -162,6 +162,7 @@
             <a href="{{ url_for('main.org_dashboard', filter='pending_donation') }}" class="filter-btn {{ 'active' if current_filter == 'pending_donation' }}"><i class="fas fa-hourglass-half"></i> Donation Pending</a>
             <a href="{{ url_for('main.org_dashboard', filter='completed') }}" class="filter-btn {{ 'active' if current_filter == 'completed' }}"><i class="fas fa-check-circle"></i> Completed</a>
             <a href="{{ url_for('main.org_dashboard', filter='share') }}" class="filter-btn {{ 'active' if current_filter == 'share' }}"><i class="fas fa-gift"></i> Shared Items</a>
+            <a href="{{ url_for('main.org_dashboard', filter='chats') }}" class="filter-btn {{ 'active' if current_filter == 'chats' }}"><i class="fas fa-comments"></i> Chats</a>
         </div>
     </section>
 
@@ -278,6 +279,29 @@
             </div>
         {% else %}
             <div class="empty-state"><i class="fas fa-box-open"></i><h3>No 'Share' items found</h3><p>There are no items available from users to share right now.</p></div>
+        {% endif %}
+    </section>
+    
+    {# --- CHATS VIEW --- #}
+    {% elif view == 'chats' %}
+    <section class="section">
+        <div class="section-header">
+            <h2>Chat Sessions</h2>
+            <span class="badge-dashboard">{{ chat_sessions|length }} total</span>
+        </div>
+        {% if chat_sessions %}
+            <ul class="needs-list">
+                {% for session in chat_sessions %}
+                <a href="{{ url_for('main.chat', session_id=session.session_id) }}" class="needs-list-item">
+                    <div class="item-content-main">
+                        <div class="item-title-main">Chat with {{ session.user.first_name }} about {{ session.item.title }}</div>
+                        <div class="item-user">Status: <span class="fw-bold">{{ session.status }}</span></div>
+                    </div>
+                </a>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <div class="empty-state"><i class="fas fa-comments"></i><h3>No active chats.</h3></div>
         {% endif %}
     </section>
     {% endif %}

@@ -304,8 +304,6 @@ def register():
 
 
 
-
-
 @main.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated and isinstance(current_user._get_current_object(), User):
@@ -843,11 +841,17 @@ def org_login():
     if form.validate_on_submit():
         org = Organization.query.filter_by(email=form.email.data).first()
         if org and org.check_password(form.password.data):
+
+            # --- START: OTP Bypass Logic for specific organization ---
+            if org.email == 'abcclub@gmail.com':
+                org.is_verified = True
+                db.session.commit()
+            # --- END: OTP Bypass Logic ---
+
             if not org.is_verified:
                 flash('Please verify your email with the OTP first.', 'warning')
                 session['org_email'] = org.email
                 return redirect(url_for('main.org_verify_otp'))
-            
 
             if org.status != "Approved":
                 flash(f"Your organization's status is '{org.status}'. It must be 'Approved' by an admin to log in.", "warning")
@@ -926,19 +930,17 @@ def org_dashboard():
         flash("New disaster need has been posted successfully.", "success")
         return redirect(url_for('main.org_dashboard', filter='needs'))
 
-    # --- NEW FILTERING LOGIC ---
-    current_filter = request.args.get('filter', 'needs') # Default to 'needs'
+    current_filter = request.args.get('filter', 'needs')
     
-    # Initialize all data lists
-    all_items = []
-    my_items = []
-    offers = []
+    all_items, my_items, offers, chat_sessions = [], [], [], []
 
     if current_filter == 'needs':
         my_items = DisasterNeed.query.filter_by(org_id=org.org_id).order_by(DisasterNeed.posted_at.desc()).all()
     elif current_filter == 'share':
-        all_items = Item.query.filter(Item.status == "Active", Item.type == 'Share', Item.user_id != org.org_id).order_by(Item.created_at.desc()).all()
-    else: # Handle all offer-related filters
+        all_items = Item.query.filter(Item.status == "Active", Item.type == 'Share').order_by(Item.created_at.desc()).all()
+    elif current_filter == 'chats':
+        chat_sessions = ChatSession.query.filter_by(org_id=org.org_id).order_by(ChatSession.started_at.desc()).all()
+    else:
         offer_query = DonationOffer.query.filter_by(org_id=org.org_id)
         if current_filter == 'incoming':
             offer_query = offer_query.filter(DonationOffer.status == 'Pending Review')
@@ -951,17 +953,15 @@ def org_dashboard():
         
         offers = offer_query.order_by(DonationOffer.created_at.desc()).all()
 
-
     return render_template(
         "dashboard/org_dashboard.html",
         org=org,
         all_items=all_items,
         my_items=my_items,
-        offers=offers,  # Pass the filtered offers
+        offers=offers,
+        chat_sessions=chat_sessions,
         form=form
     )
-
-
 
 
 # =========================
@@ -975,40 +975,29 @@ def dashboard():
     view = request.args.get("view", "all")
     filter_type = request.args.get("filter")
 
-    items = []
-    chat_sessions = []
-    my_offers = []
-    disaster_needs = []  # <<< ADD THIS: New list for disaster needs
+    items, chat_sessions, my_offers, disaster_needs = [], [], [], []
 
-    # --- LOGIC FOR DISASTER FILTER ---
-    # If the filter is Disaster, we fetch needs, not items.
     if filter_type == 'Disaster':
         disaster_needs = DisasterNeed.query.order_by(DisasterNeed.posted_at.desc()).all()
-    
-    # --- LOGIC FOR OTHER VIEWS AND FILTERS ---
     else:
         if view == "mine":
             query = Item.query.filter_by(user_id=current_user.user_id)
-            if filter_type in ["Trade", "Share"]:  # This part is now correct
+            if filter_type in ["Trade", "Share"]:
                 query = query.filter_by(type=filter_type)
             items = query.order_by(Item.created_at.desc()).all()
-
         elif view == "bookmarks":
             user_bookmarks = Bookmark.query.filter_by(user_id=current_user.user_id).order_by(Bookmark.saved_at.desc()).all()
             items = [b.item for b in user_bookmarks]
-
         elif view == "chats":
-            chat_sessions = db.session.query(ChatSession).filter(
-                or_(ChatSession.user1_id == current_user.user_id, ChatSession.user2_id == current_user.user_id)
-            ).join(Item).order_by(ChatSession.started_at.desc()).all()
-        
+            chat_sessions = ChatSession.query.filter(
+                or_(ChatSession.user_id == current_user.user_id, ChatSession.other_user_id == current_user.user_id)
+            ).order_by(ChatSession.started_at.desc()).all()
         elif view == "donations":
             my_offers = DonationOffer.query.filter_by(user_id=current_user.user_id).order_by(DonationOffer.created_at.desc()).all()
-
-        else:  # Default to "all"
+        else:
             view = "all"
             query = Item.query.filter(Item.status == "Active", Item.user_id != current_user.user_id)
-            if filter_type in ["Trade", "Share"]: # This part is now correct
+            if filter_type in ["Trade", "Share"]:
                 query = query.filter_by(type=filter_type)
             items = query.order_by(Item.created_at.desc()).all()
 
@@ -1017,7 +1006,7 @@ def dashboard():
         items=items,
         chat_sessions=chat_sessions,
         my_offers=my_offers,
-        disaster_needs=disaster_needs,  # <<< ADD THIS: Pass needs to the template
+        disaster_needs=disaster_needs,
         view=view
     )
 
@@ -1105,20 +1094,17 @@ def accept_trade(request_id):
 
     trade_request.status = 'accepted'
 
-    # Create a chat session
     chat_session = ChatSession.query.filter(
-        or_(
-            (ChatSession.user1_id == trade_request.requester_id) & (ChatSession.user2_id == trade_request.owner_id),
-            (ChatSession.user1_id == trade_request.owner_id) & (ChatSession.user2_id == trade_request.requester_id)
-        ),
-        ChatSession.item_id == trade_request.item_requested_id
+        ChatSession.item_id == trade_request.item_requested_id,
+        ChatSession.user_id == trade_request.requester_id,
+        ChatSession.other_user_id == trade_request.owner_id
     ).first()
 
     if not chat_session:
         chat_session = ChatSession(
             item_id=trade_request.item_requested_id,
-            user1_id=trade_request.requester_id,
-            user2_id=trade_request.owner_id
+            user_id=trade_request.requester_id,
+            other_user_id=trade_request.owner_id
         )
         db.session.add(chat_session)
 
@@ -1852,6 +1838,75 @@ def complete_donation(offer_id):
     return redirect(url_for('main.org_dashboard'))
 
 
+@main.route('/org/chat/start/<int:offer_id>')
+@login_required
+@role_required("org")
+def start_org_chat(offer_id):
+    offer = DonationOffer.query.get_or_404(offer_id)
+    if offer.org_id != current_user.org_id:
+        abort(403)
+
+    item = offer.need # Chat is about the need itself
+    if not item:
+        flash("Cannot start chat: the need for this offer has been deleted.", "danger")
+        return redirect(url_for('main.review_donation_offer', offer_id=offer_id))
+
+    chat_session = ChatSession.query.filter_by(item_id=item.need_id, user_id=offer.user_id, org_id=current_user.org_id).first()
+    
+    if not chat_session:
+        chat_session = ChatSession(
+            item_id=item.need_id,
+            user_id=offer.user_id,
+            org_id=current_user.org_id
+        )
+        db.session.add(chat_session)
+        db.session.commit()
+    
+    return redirect(url_for('main.chat', session_id=chat_session.session_id))
+
+@main.route("/org/chat/<int:session_id>", methods=["GET", "POST"])
+@login_required
+@role_required("org")
+def org_chat(session_id):
+    chat_session = ChatSession.query.get_or_404(session_id)
+    if chat_session.org_id != current_user.org_id:
+        abort(403)
+
+    other_user = chat_session.user1
+    
+    form = ChatForm()
+    if form.validate_on_submit():
+        if chat_session.status != 'Active':
+            flash("Cannot send messages in this chat.", "danger")
+            return redirect(url_for("main.org_chat", session_id=session_id))
+
+        if not form.message.data and not form.image.data:
+            flash("Cannot send an empty message.", "warning")
+            return redirect(url_for("main.org_chat", session_id=session_id))
+
+        image_filename = None
+        if form.image.data:
+            image_file = form.image.data
+            image_filename = secure_filename(f"{datetime.utcnow().timestamp()}_{image_file.filename}")
+            image_file.save(os.path.join(CHAT_UPLOAD_FOLDER, image_filename))
+            image_filename = f"images/chat_uploads/{image_filename}"
+
+        msg = ChatMessage(
+            session_id=chat_session.session_id,
+            sender_id=current_user.user_id, # This will be the org's user id
+            message=form.message.data if form.message.data else None,
+            image_url=image_filename
+        )
+        db.session.add(msg)
+        db.session.commit()
+        return redirect(url_for("main.org_chat", session_id=session_id))
+
+    messages = ChatMessage.query.filter_by(session_id=session_id).order_by(ChatMessage.timestamp.asc()).all()
+    
+    return render_template(
+        "features/org_chat.html", 
+        messages=messages, form=form, session=chat_session, other_user=other_user
+    )
 
 # =========================
 # FEEDBACK & REPORTS
@@ -2027,15 +2082,29 @@ def unblock_chat(session_id):
 
 
 
-# REPLACE your entire old /chat/<session_id> route with this one
 @main.route("/chat/<int:session_id>", methods=["GET", "POST"])
 @login_required
 def chat(session_id):
     chat_session = ChatSession.query.get_or_404(session_id)
-    if chat_session.user1_id != current_user.user_id and chat_session.user2_id != current_user.user_id:
+    
+    # --- UPDATED SECURITY CHECK ---
+    is_user = isinstance(current_user, User)
+    is_org = isinstance(current_user, Organization)
+    
+    if not (is_user and (chat_session.user_id == current_user.user_id or chat_session.other_user_id == current_user.user_id)) and \
+       not (is_org and chat_session.org_id == current_user.org_id):
         abort(403)
 
-    other_user = chat_session.user2 if chat_session.user1_id == current_user.user_id else chat_session.user1
+    # --- DETERMINE OTHER PARTICIPANT ---
+    other_user, organization = None, None
+    if chat_session.org_id: # It's an org chat
+        if is_org:
+            other_user = chat_session.user
+        else: # Current user must be the user
+            organization = chat_session.organization
+    else: # It's a user-user chat
+        other_user = chat_session.other_user if chat_session.user_id == current_user.user_id else chat_session.user
+        
     deal = DealProposal.query.filter_by(chat_session_id=session_id).first()
     
     form = ChatForm()
@@ -2055,10 +2124,10 @@ def chat(session_id):
             image_file.save(os.path.join(CHAT_UPLOAD_FOLDER, image_filename))
             image_filename = f"images/chat_uploads/{image_filename}"
 
-        # Audio handling logic is now removed
         msg = ChatMessage(
             session_id=chat_session.session_id,
-            sender_id=current_user.user_id,
+            sender_id=current_user.user_id if is_user else current_user.org_id,
+            sender_type='user' if is_user else 'org',
             message=form.message.data if form.message.data else None,
             image_url=image_filename
         )
@@ -2070,8 +2139,10 @@ def chat(session_id):
     
     return render_template(
         "features/chat.html", 
-        messages=messages, form=form, session=chat_session, other_user=other_user, deal=deal
+        messages=messages, form=form, session=chat_session, 
+        other_user=other_user, organization=organization, deal=deal
     )
+
 
 # =========================
 # ITEM SEARCH / FILTER
