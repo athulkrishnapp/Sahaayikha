@@ -220,6 +220,8 @@ class RegistrationForm(FlaskForm):
     submit = SubmitField('Register')
 
 
+# app/forms.py
+
 class OrganizationRegistrationForm(FlaskForm):
     name = StringField('Organization Name', validators=[DataRequired(), Length(max=255)])
     email = StringField('Email', validators=[DataRequired(), Email(), Length(max=255)])
@@ -228,6 +230,19 @@ class OrganizationRegistrationForm(FlaskForm):
     phone = StringField('Phone', validators=[Optional(), Length(max=100)])
     location = SelectField('Location', choices=KERALA_LOCATIONS, validators=[DataRequired()])
     profile_picture = FileField('Organization Logo/Profile', validators=[Optional(), FileAllowed(['jpg', 'png', 'jpeg'])])
+    description = TextAreaField('About Your Organization', validators=[Optional(), Length(max=2000)]) # <-- ADDED THIS LINE
+    submit = SubmitField('Register Organization')
+
+
+class OrganizationRegistrationForm(FlaskForm):
+    name = StringField('Organization Name', validators=[DataRequired(), Length(max=255)])
+    email = StringField('Email', validators=[DataRequired(), Email(), Length(max=255)])
+    password = PasswordField('Password', validators=[DataRequired(), Length(min=6)])
+    confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('password')])
+    phone = StringField('Phone', validators=[Optional(), Length(max=100)])
+    location = SelectField('Location', choices=KERALA_LOCATIONS, validators=[DataRequired()])
+    profile_picture = FileField('Organization Logo/Profile', validators=[Optional(), FileAllowed(['jpg', 'png', 'jpeg'])])
+    description = TextAreaField('About Your Organization', validators=[Optional(), Length(max=2000)]) # <-- ADDED THIS LINE
     submit = SubmitField('Register Organization')
 
 

@@ -50,7 +50,7 @@
     .section h2 { font-size: 1.5rem; font-weight: 600; }
     .item-grid { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
     @media (min-width: 1400px) { .item-grid { grid-template-columns: repeat(5, 1fr); } }
-    .dashboard-item-card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; transition: all 0.3s ease; display: flex; flex-direction: column; height: 100%; }
+    .dashboard-item-card { background: var(--card); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; transition: all 0.3s ease; display: flex; flex-direction: column; height: 100%; position: relative; /* Added for badge positioning */ }
     .dashboard-item-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-card); }
     .item-image { aspect-ratio: 16 / 9; background: var(--muted); }
     .item-image img { width: 100%; height: 100%; object-fit: cover; }
@@ -106,6 +106,64 @@
     .need-card .item-actions .btn-primary-dashboard {
         flex-grow: 0;
     }
+
+    /* Style for the share button on dashboard cards */
+    .item-card-share-btn {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        background: rgba(255, 255, 255, 0.7);
+        color: #333;
+        border: none;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: background 0.2s ease, color 0.2s ease;
+        z-index: 2;
+    }
+    .item-card-share-btn:hover {
+        background: rgba(255, 255, 255, 0.9);
+        color: #0d6efd;
+    }
+     .dark-mode .item-card-share-btn {
+         background: rgba(50, 50, 50, 0.7);
+         color: #eee;
+    }
+     .dark-mode .item-card-share-btn:hover {
+         background: rgba(70, 70, 70, 0.9);
+         color: #4dabf7;
+    }
+    /* Feedback message style */
+    .copy-feedback {
+        font-size: 0.8em;
+        color: var(--bs-success);
+        margin-left: 5px;
+        display: none; /* Hide by default */
+    }
+
+    /* -- URGENT ITEM STYLES -- */
+    .dashboard-item-card.urgent-item {
+        border-color: var(--bs-danger); /* Red border */
+    }
+    .urgent-badge {
+        position: absolute;
+        top: 0.75rem;
+        left: 0.75rem;
+        background-color: var(--bs-danger);
+        color: white;
+        font-size: 0.7rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.25rem;
+        font-weight: bold;
+        z-index: 2;
+    }
+    /* -- END URGENT ITEM STYLES -- */
+
 </style>
 
 <header class="dashboard-header">
@@ -133,7 +191,7 @@
 </header>
 
 <main class="dashboard-container">
-    
+
     {% if view in ['all', 'mine'] %}
     <section class="section">
         {% set current_filter = request.args.get('filter') %}
@@ -141,7 +199,7 @@
             <a href="{{ url_for('main.dashboard', view=view) }}" class="filter-btn {{ 'active' if not current_filter }}">All</a>
             <a href="{{ url_for('main.dashboard', view=view, filter='Trade') }}" class="filter-btn {{ 'active' if current_filter == 'Trade' }}"><i class="fas fa-exchange-alt"></i> Trade</a>
             <a href="{{ url_for('main.dashboard', view=view, filter='Share') }}" class="filter-btn {{ 'active' if current_filter == 'Share' }}"><i class="fas fa-gift"></i> Share</a>
-            
+
             {% if view == 'all' %}
             <a href="{{ url_for('main.dashboard', view=view, filter='Disaster') }}" class="filter-btn {{ 'active' if current_filter == 'Disaster' }}"><i class="fas fa-exclamation-triangle"></i> Disaster Aid</a>
             {% endif %}
@@ -159,7 +217,7 @@
             {% elif current_filter == 'Disaster' %} <h2>Active Disaster Needs</h2>
             {% else %} <h2>All Recent Items</h2>
             {% endif %}
-            
+
             <span class="badge-dashboard">
                 {% if view == 'chats' %}{{ regular_chats|length + disaster_chats|length }}
                 {% elif view == 'donations' %}{{ my_offers|length }}
@@ -240,7 +298,20 @@
                 {% if items %}
                     <div class="item-grid">
                         {% for item in items %}
-                        <div class="dashboard-item-card">
+                        <div class="dashboard-item-card {% if item.urgency_level == 'Urgent' %}urgent-item{% endif %}">
+                             {# Add Urgent Badge if needed #}
+                            {% if item.urgency_level == 'Urgent' %}
+                                <span class="urgent-badge">Urgent</span>
+                            {% endif %}
+                            <button
+                                type="button"
+                                class="item-card-share-btn share-button"
+                                title="Copy link"
+                                data-item-url="{{ url_for('main.view_item', item_id=item.item_id, _external=True) }}"
+                                onclick="event.preventDefault(); event.stopPropagation(); copyItemLink(this);">
+                                <i class="fas fa-share-alt"></i>
+                                <span class="copy-feedback ms-1">Copied!</span> {# Simplified feedback #}
+                            </button>
                             <a href="{{ url_for('main.view_item', item_id=item.item_id) }}" class="text-decoration-none">
                                 <div class="item-image"><img src="{% if item.images.first() %}{{ url_for('static', filename=item.images.first().image_url) }}{% else %}{{ url_for('static', filename='images/item_placeholder.jpg') }}{% endif %}" alt="{{ item.title }}"></div>
                             </a>
@@ -340,4 +411,26 @@
         <i class="fas fa-plus fab-button-icon"></i>
     </a>
 </div>
+<script>
+    // --- JAVASCRIPT FOR COPYING LINK ---
+    function copyItemLink(buttonElement) {
+        const urlToCopy = buttonElement.dataset.itemUrl;
+        const feedbackSpan = buttonElement.querySelector('.copy-feedback');
+
+        navigator.clipboard.writeText(urlToCopy).then(() => {
+            // Success feedback
+            feedbackSpan.style.display = 'inline';
+            buttonElement.disabled = true; // Disable button briefly
+            setTimeout(() => {
+                feedbackSpan.style.display = 'none';
+                buttonElement.disabled = false;
+            }, 1500); // Show feedback for 1.5 seconds
+        }).catch(err => {
+            console.error('Failed to copy link: ', err);
+            alert('Could not copy link. Please try again.');
+        });
+    }
+    // --- END JAVASCRIPT FOR COPYING LINK ---
+</script>
+
 {% endblock %}

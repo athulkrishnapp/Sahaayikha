@@ -133,6 +133,12 @@
         transition: 0.3s; cursor: pointer;
     }
     .lightbox-close:hover { color: #bbb; }
+
+    .copy-feedback {
+        font-size: 0.8em;
+        color: var(--bs-success); /* Use Bootstrap success color */
+        margin-left: 5px;
+    }    
 </style>
 
 <div class="container py-5">
@@ -183,6 +189,16 @@
                 {% else %}
                     {# --- Fallback to original button logic --- #}
                     {% if current_user.is_authenticated %}
+                    {# --- SHARE BUTTON ADDED --- #}
+                        <button
+                            type="button"
+                            class="btn btn-outline-secondary share-button"
+                            title="Copy link to this item"
+                            onclick="copyCurrentPageLink(this);">
+                            <i class="fas fa-share-alt me-2"></i>Share
+                            <span class="copy-feedback ms-1" style="display: none;">Copied!</span>
+                        </button>
+                        {# --- END SHARE BUTTON --- #}
                         {% if current_user.user_id == item.user_id %}
                             <a href="{{ url_for('main.edit_item', item_id=item.item_id) }}" class="btn btn-warning"><i class="fas fa-edit me-2"></i>Edit</a>
                             <form action="{{ url_for('main.delete_item', item_id=item.item_id) }}" method="POST" class="d-inline">
@@ -295,6 +311,27 @@
 </div>
 
 <script>
+// --- JAVASCRIPT FOR COPYING CURRENT PAGE LINK ---
+    function copyCurrentPageLink(buttonElement) {
+        const urlToCopy = window.location.href; // Get current page URL
+        const feedbackSpan = buttonElement.querySelector('.copy-feedback');
+
+        navigator.clipboard.writeText(urlToCopy).then(() => {
+            // Success feedback
+            feedbackSpan.style.display = 'inline';
+            buttonElement.disabled = true; // Disable button briefly
+            setTimeout(() => {
+                feedbackSpan.style.display = 'none';
+                buttonElement.disabled = false;
+            }, 1500); // Show feedback for 1.5 seconds
+        }).catch(err => {
+            console.error('Failed to copy link: ', err);
+            // Optional: Show an error message to the user
+            alert('Could not copy link. Please try again.');
+        });
+    }
+    // --- END JAVASCRIPT FOR COPYING LINK ---
+
 document.addEventListener('DOMContentLoaded', () => {
     // ... (Your existing script for gallery and lightbox remains the same) ...
     const mainImage = document.getElementById('mainImage');

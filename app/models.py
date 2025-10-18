@@ -101,6 +101,7 @@ class Organization(UserMixin, db.Model):
     profile_picture = db.Column(db.String(255), nullable=True)
     status = db.Column(db.String(50), default="Pending")
     registered_at = db.Column(db.DateTime, default=datetime.utcnow)
+    description = db.Column(db.Text, nullable=True)  # <-- ADDED THIS LINE
     
     otp = db.Column(db.String(6), nullable=True)
     otp_expiry = db.Column(db.DateTime, nullable=True)
@@ -267,9 +268,8 @@ class ChatMessage(db.Model):
     message = db.Column(db.Text, nullable=True)
     image_url = db.Column(db.String(255), nullable=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
-    is_read = db.Column(db.Boolean, default=False, nullable=False)
+    is_read = db.Column(db.Boolean, default=False)
     deleted_at = db.Column(db.DateTime, nullable=True)
-
 
 
 # ---------- DISASTER NEEDS ----------

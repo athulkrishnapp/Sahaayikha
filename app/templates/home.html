@@ -158,6 +158,44 @@
     .dark-mode .text-muted {
         color: rgba(233, 236, 239, 0.7) !important;
     }
+/* Style for the new share button */
+    .gallery-card-share-btn {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        background: rgba(255, 255, 255, 0.7);
+        color: #333;
+        border: none;
+        border-radius: 50%;
+        width: 35px;
+        height: 35px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: background 0.2s ease, color 0.2s ease;
+        z-index: 2; /* Ensure it's above the image gradient */
+    }
+    .gallery-card-share-btn:hover {
+        background: rgba(255, 255, 255, 0.9);
+        color: #0d6efd; /* Bootstrap primary blue */
+    }
+    .dark-mode .gallery-card-share-btn {
+         background: rgba(50, 50, 50, 0.7);
+         color: #eee;
+    }
+     .dark-mode .gallery-card-share-btn:hover {
+         background: rgba(70, 70, 70, 0.9);
+         color: #4dabf7; /* Lighter blue for dark mode */
+    }
+    /* Add a class for feedback */
+    .copy-feedback {
+        font-size: 0.8em;
+        color: var(--bs-success); /* Use Bootstrap success color */
+        margin-left: 5px;
+    }
+
 </style>
 
 <section class="modern-hero">
@@ -211,6 +249,7 @@
     </div>
 </section>
 
+{% if not current_user.is_authenticated or current_user.__class__.__name__ == 'User' %}
 <section id="gallery" class="gallery-section">
     <div class="container">
         <div class="section-header d-flex flex-wrap justify-content-between align-items-center">
@@ -218,36 +257,39 @@
                 <h2 class="fw-bold">Discover What's Trending</h2>
                 <p class="text-muted">Explore the latest items shared by our generous community.</p>
             </div>
-            <a href="#" class="btn btn-outline-primary">View All Items <i class="fas fa-arrow-right ms-2"></i></a>
+             {# Link now correctly points to login if not authenticated #}
+            <a href="{{ url_for('main.items_list') if current_user.is_authenticated else url_for('main.login') }}" class="btn btn-outline-primary">View All Items <i class="fas fa-arrow-right ms-2"></i></a>
         </div>
         <div class="row g-4">
             {% if items and items|length > 0 %}
                 {% for item in items %}
-                    {% if loop.first %}
-                        <div class="col-lg-6 d-flex align-items-stretch">
-                            <a href="#" class="card-link w-100">
-                                <div class="gallery-card featured-card">
-                                    <img src="{% if item.images.first() %}{{ url_for('static', filename=item.images.first().image_url) }}{% else %}{{ url_for('static', filename='images/item_placeholder.jpg') }}{% endif %}" alt="{{ item.title }}">
-                                    <div class="gallery-card-content">
-                                        <p class="gallery-card-category">{{ item.category }}</p>
-                                        <h4 class="gallery-card-title">{{ item.title }}</h4>
-                                    </div>
+                     {# Define item_url based on login status #}
+                    {% set item_url = url_for('main.view_item', item_id=item.item_id) if current_user.is_authenticated else url_for('main.login') %}
+                    <div class="col-lg-{{ '6' if loop.first else '3' }} col-md-6 d-flex align-items-stretch">
+                        {# The main card link still directs based on login status #}
+                        <a href="{{ item_url }}" class="card-link w-100">
+                            <div class="gallery-card {{ 'featured-card' if loop.first }}">
+                                {# --- SHARE BUTTON ADDED --- #}
+                                <button
+                                    type="button"
+                                    class="gallery-card-share-btn share-button"
+                                    title="Copy link"
+                                    {# Always generate the real item URL for copying, even if not logged in #}
+                                    data-item-url="{{ url_for('main.view_item', item_id=item.item_id, _external=True) }}"
+                                    onclick="event.preventDefault(); event.stopPropagation(); copyItemLink(this);">
+                                    <i class="fas fa-share-alt"></i>
+                                    <span class="copy-feedback ms-1" style="display: none;">Copied!</span>
+                                </button>
+                                {# --- END SHARE BUTTON --- #}
+
+                                <img src="{% if item.images.first() %}{{ url_for('static', filename=item.images.first().image_url) }}{% else %}{{ url_for('static', filename='images/item_placeholder.jpg') }}{% endif %}" alt="{{ item.title }}">
+                                <div class="gallery-card-content">
+                                    <p class="gallery-card-category">{{ item.category }}</p>
+                                    <h4 class="gallery-card-title">{{ item.title }}</h4>
                                 </div>
-                            </a>
-                        </div>
-                    {% else %}
-                        <div class="col-lg-3 col-md-6 d-flex align-items-stretch">
-                            <a href="#" class="card-link w-100">
-                                <div class="gallery-card">
-                                    <img src="{% if item.images.first() %}{{ url_for('static', filename=item.images.first().image_url) }}{% else %}{{ url_for('static', filename='images/item_placeholder.jpg') }}{% endif %}" alt="{{ item.title }}">
-                                    <div class="gallery-card-content">
-                                        <p class="gallery-card-category">{{ item.category }}</p>
-                                        <h5 class="gallery-card-title">{{ item.title }}</h5>
-                                    </div>
-                                </div>
-                            </a>
-                        </div>
-                    {% endif %}
+                            </div>
+                        </a>
+                    </div>
                 {% endfor %}
             {% else %}
                 <div class="col-12 text-center">
@@ -257,19 +299,18 @@
         </div>
     </div>
 </section>
+{% endif %}
 
-  <!-- Custom Footer for Home Page -->
+
   <footer class="bg-light text-dark mt-5 pt-5">
     <div class="container">
       <div class="row">
 
-        <!-- About Section -->
         <div class="col-md-4 mb-4">
           <h5 class="fw-bold">Sahaayikha</h5>
           <p>Together We Share. Together We Care.</p>
         </div>
 
-        <!-- Quick Links -->
         <div class="col-md-4 mb-4">
           <h5 class="fw-bold">Quick Links</h5>
           <ul class="list-unstyled">
@@ -284,7 +325,6 @@
           </ul>
         </div>
 
-        <!-- Get Involved -->
         <div class="col-md-4 mb-4">
           <h5 class="fw-bold">Get Involved</h5>
           <p>Your contribution can make a world of difference. Join us in our mission to help.</p>
@@ -296,7 +336,29 @@
   </footer>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
+
+// --- JAVASCRIPT FOR COPYING LINK ---
+    function copyItemLink(buttonElement) {
+        const urlToCopy = buttonElement.dataset.itemUrl;
+        const feedbackSpan = buttonElement.querySelector('.copy-feedback');
+
+        navigator.clipboard.writeText(urlToCopy).then(() => {
+            // Success feedback
+            feedbackSpan.style.display = 'inline';
+            buttonElement.disabled = true; // Disable button briefly
+            setTimeout(() => {
+                feedbackSpan.style.display = 'none';
+                buttonElement.disabled = false;
+            }, 1500); // Show feedback for 1.5 seconds
+        }).catch(err => {
+            console.error('Failed to copy link: ', err);
+            // Optional: Show an error message to the user
+            alert('Could not copy link. Please try again.');
+        });
+    }
+// --- END JAVASCRIPT FOR COPYING LINK ---
+
+    document.addEventListener('DOMContentLoaded', () => {
     // --- Text Reveal Animation ---
     const animateText = (selector, delayStart = 0) => {
         const element = document.querySelector(selector);

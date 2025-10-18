@@ -320,12 +320,6 @@ def login():
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
         if user and user.check_password(form.password.data):
-
-            if user.email == 'joney@gmail.com':
-                user.is_verified = True
-                db.session.commit()
-
-
             if not user.is_verified:
                 flash('Please verify your account first.', 'warning')
                 session['email'] = user.email
@@ -339,6 +333,7 @@ def login():
 
         flash("Invalid email or password.", "danger")
 
+    return render_template("auth/user_login.html", form=form)
     return render_template("auth/user_login.html", form=form)
 
 
@@ -463,7 +458,17 @@ def logout():
 # -------------------------
 # PROFILE UPDATE
 # -------------------------
-# In app/routes.py
+
+
+
+@main.route('/organization/<int:org_id>')
+def public_org_profile(org_id):
+    organization = Organization.query.get_or_404(org_id)
+    # Fetch active disaster needs posted by the organization
+    needs = DisasterNeed.query.filter_by(org_id=organization.org_id).order_by(DisasterNeed.posted_at.desc()).all()
+    return render_template("public_org_profile.html", organization=organization, needs=needs)
+
+
 
 @main.route("/profile", methods=["GET", "POST"])
 @login_required
@@ -499,6 +504,7 @@ def profile():
             user.search_radius = int(form.search_radius.data)
         else: 
             user.name = form.name.data
+            user.description = form.description.data # <-- ADDED THIS LINE
         user.phone = form.phone.data
         
         if user.location != form.location.data:
@@ -520,6 +526,10 @@ def profile():
     
     # Pass the blocked_chats list to the template
     return render_template(template, form=form, blocked_chats=blocked_chats)
+
+
+
+
 
 @main.route('/profile/picture/delete', methods=['POST'])
 @login_required
@@ -851,13 +861,6 @@ def org_login():
     if form.validate_on_submit():
         org = Organization.query.filter_by(email=form.email.data).first()
         if org and org.check_password(form.password.data):
-
-            # --- START: OTP Bypass Logic for specific organization ---
-            if org.email == 'abcclub@gmail.com':
-                org.is_verified = True
-                db.session.commit()
-            # --- END: OTP Bypass Logic ---
-
             if not org.is_verified:
                 flash('Please verify your email with the OTP first.', 'warning')
                 session['org_email'] = org.email
@@ -1219,13 +1222,14 @@ def new_item():
 
 
 @main.route("/item/<int:item_id>")
+@login_required # <-- ADDED THIS DECORATOR
 def view_item(item_id):
     item = Item.query.get_or_404(item_id)
     is_bookmarked = False
     session = None
     deal = None
-    trade_request = None 
-    context_trade_request = None # <-- New variable
+    trade_request = None
+    context_trade_request = None
 
     # New: Check for a trade request context from the URL
     context_trade_id = request.args.get('context_trade_id', type=int)
@@ -1260,13 +1264,13 @@ def view_item(item_id):
             ).first()
 
     return render_template(
-        "items/view_item.html", 
-        item=item, 
-        is_bookmarked=is_bookmarked, 
-        session=session, 
-        deal=deal, 
-        trade_request=trade_request, 
-        context_trade_request=context_trade_request # <-- Pass the new variable
+        "items/view_item.html",
+        item=item,
+        is_bookmarked=is_bookmarked,
+        session=session,
+        deal=deal,
+        trade_request=trade_request,
+        context_trade_request=context_trade_request
     )
 
 
@@ -1405,8 +1409,8 @@ def delete_item(item_id):
     for img in item.images:
         try:
             os.remove(os.path.join(ITEM_UPLOAD_FOLDER, os.path.basename(img.image_url)))
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error deleting image file: {e}")
         db.session.delete(img)
 
     # Delete the item itself
